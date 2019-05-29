@@ -1,0 +1,3 @@
+
+class ItemNotFound(ValueError):
+    pass

@@ -1,0 +1,39 @@
+GsuiteAlertCenter:
+ SCOPES:
+    - 'https://cloud.mongodb.com/api/atlas/v1.0'
+ LOG_FILES:
+    - mongodb.gz
+    - mongos.gz
+    - mongosqld.gz
+    # - mongodb-audit-log.gz
+    # - mongos-audit-log.gz
+
+ DELEGATED_EMAIL: null
+ VERSION: "v1beta1"
+ FETCH_METHOD: get
+ PAGINATION_LIMIT: 100
+ CREDENTIALS_FILEPATH: null
+
+Logging:
+ LOG_FORMAT: "%(levelname)s | %(asctime)s | %(threadName)s | %(name)s | %(message)s"
+ ROTATION_TYPE: D
+ ROTATION_INTERVAL: 10
+ ENABLE_CONSOLE_LOG: true
+ ENABLE_LOGFILE: false
+ LOG_FILEPATH: /tmp/sumoapiclient.log
+
+Collection:
+ ENVIRONMENT: onprem
+ NUM_WORKERS: 2
+ OUTPUT_HANDLER: HTTP
+ MAX_RETRY: 5
+ BACKOFF_FACTOR: 1
+ TIMEOUT: 60
+ COMPRESSED: true
+ MAX_PAYLOAD_BYTESIZE: 500000
+ END_TIME_EPOCH_OFFSET_SECONDS: 120
+ BACKFILL_DAYS: 1
+ DBNAME: "gsuitealertcenter"
+
+SumoLogic:
+ SUMO_ENDPOINT: null
