@@ -60,3 +60,12 @@ class KeyValueStorage():
     def destroy(self):
         pass
 
+    @abstractmethod
+    def acquire_lock(self, key):
+        pass
+
+    @abstractmethod
+    def release_lock(self, key):
+        pass
+
+

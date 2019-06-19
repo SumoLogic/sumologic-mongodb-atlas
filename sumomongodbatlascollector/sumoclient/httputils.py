@@ -24,7 +24,7 @@ class ClientMixin(object):
         return sess
 
     @classmethod
-    def make_request(cls, url, method="get", session=None, TIMEOUT=5, **kwargs):
+    def make_request(cls, url, method="get", session=None, TIMEOUT=5, is_file=False, **kwargs):
         log = get_logger(__name__)
         start_time = datetime.now()
         try:
@@ -35,10 +35,13 @@ class ClientMixin(object):
             resp.raise_for_status()
             log.info(f'''{method} Request url: {url} status_code: {resp.status_code}''')
             if resp.status_code == 200:
-                data = resp.json() if len(resp.content) > 0 else {}
+                if is_file:
+                    data = resp.content
+                else:
+                    data = resp.json() if len(resp.content) > 0 else {}
                 return True, data
             else:
-                log.error(f'''Request Failed: {resp.content} url: {url} status_code: {resp.status_code}''')
+                log.error(f'''Request Failed: {resp.content} url: {url} status_code: {resp.status_code} reason: {resp.reason}''')
                 return False, resp.content
         except JSONDecodeError as err:
             log.error(f'''Error in Decoding response {err}''', exc_info=True)
@@ -55,7 +58,7 @@ class ClientMixin(object):
             if not session:
                 # if session was not input then deleting the current session
                 sess.close()
-        return False, None
+        return False, resp.reason or resp.raw.reason
 
 
 class SessionPool(object):

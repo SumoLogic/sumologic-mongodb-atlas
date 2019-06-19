@@ -14,14 +14,14 @@ class HTTPHandler(BaseOutputHandler):
         self.collection_config = config['Collection']
         self.sumoconn = SessionPool(self.collection_config['MAX_RETRY'], self.collection_config['BACKOFF_FACTOR'])
 
-    def send(self, data, extra_headers=None):
+    def send(self, data, extra_headers=None, jsondump=True):
         if not data:
             return True
         sess = self.sumoconn.get_request_session()
         headers = {
             "content-type": "application/json",
             "accept": "application/json",
-            "X-Sumo-Client": "sumologic-gsuitealertcenter-collector"
+            "X-Sumo-Client": "sumologic-mongodbatlas-collector"
         }
 
         if extra_headers:
@@ -30,17 +30,17 @@ class HTTPHandler(BaseOutputHandler):
         num_batches, chunk_size = self.get_chunk_size(data, self.collection_config.get("MAX_PAYLOAD_BYTESIZE", 500000))
         self.log.info(f'''Chunking data total_len: {len(data)} batch_len: {chunk_size} num_batches: {num_batches}''')
         for idx, batch in enumerate(self.chunking(data, chunk_size), start=1):
-            body = get_body(batch)
+            body = get_body(batch, jsondump)
             self.log.info(f'''Sending batch {idx} len: {len(body)}''')
             if self.collection_config.get("COMPRESSED", True):
                 body = zlib.compress(body)
                 headers.update({"Content-Encoding": "deflate"})
 
             fetch_success, respjson = ClientMixin.make_request(self.sumo_config['SUMO_ENDPOINT'], method="post",
-                                                               session=sess, data=body, TIMEOUT=self.collection_config['TIMEOUT']
+                                                               session=sess, data=body, TIMEOUT=self.collection_config['TIMEOUT'],
                                                                headers=headers)
             if not fetch_success:
-                self.log.error(f'''Error in Sending to Sumo {respjson.content}''')
+                self.log.error(f'''Error in Sending to Sumo {respjson}''')
                 return False
         return True
 

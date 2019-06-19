@@ -5,7 +5,7 @@ from common.mixin import DynamicLoadMixin
 class ProviderFactory(DynamicLoadMixin):
 
     provider_map = {
-        # "aws": AWSProvider,
+        "aws": "aws.AWSProvider",
         # "azure": AzureProvider,
         "gcp": "gcp.GCPProvider",
         "onprem": "onprem.OnPremProvider"

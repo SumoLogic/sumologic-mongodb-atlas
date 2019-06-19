@@ -30,10 +30,10 @@ class MongoDBAtlasCollector(object):
         self.log = get_logger(__name__, force_create=True, **self.config['Logging'])
         self.collection_config = self.config['Collection']
         self.api_config = self.config['MongoDBAtlas']
-        op_cli = ProviderFactory.get_provider(self.config['Collection']['ENVIRONMENT'])
+        op_cli = ProviderFactory.get_provider(self.collection_config['ENVIRONMENT'])
         self.kvstore = op_cli.get_storage("keyvalue", name=self.config['Collection']['DBNAME'])
         self.DEFAULT_START_TIME_EPOCH = get_current_timestamp() - self.collection_config['BACKFILL_DAYS']*24*60*60
-        self.alertcli = self.get_alert_client()
+
 
     def get_current_dir(self):
         cur_dir = os.path.dirname(__file__)

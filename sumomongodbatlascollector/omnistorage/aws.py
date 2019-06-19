@@ -1,9 +1,12 @@
 # -*- coding: future_fstrings -*-
+from sys import path
+path.append("/Users/hpal/git/sumologic-mongodb-atlas/sumomongodbatlascollector/")
+
 from base import Provider, KeyValueStorage
 import boto3
-
+from datetime import datetime, timezone
 from factory import ProviderFactory
-from utils import get_logger
+from common.logger import get_logger
 import json
 import os
 import decimal
@@ -20,9 +23,15 @@ class DecimalEncoder(json.JSONEncoder):
         return super(DecimalEncoder, self).default(o)
 
 
+def get_current_datetime():
+    return datetime.now(tz=timezone.utc)
+
+
 class AWSKVStorage(KeyValueStorage):
-    KEY_COL = "key"
-    VALUE_COL = "value"
+    KEY_COL = "key_col"
+    VALUE_COL = "value_col"
+    LOCK_DATE_COL = "last_locked_date"
+
     KEY_TYPE = "S"
 
     def setup(self, name, region_name, key_type=KEY_TYPE, force_create=False, *args, **kwargs):
@@ -63,17 +72,18 @@ class AWSKVStorage(KeyValueStorage):
         if response.get('ResponseMetadata')['HTTPStatusCode'] != 200:
             raise Exception(f'''Error in get_item api: {response}''')
         value = response["Item"][self.VALUE_COL] if response.get("Item") else None
-        self.logger.info(f'''Fetched Item from {self.table_name} table''')
+        self.logger.info(f'''Fetched Item {key} from {self.table_name} table''')
         return self._replace_decimals(value)
 
     def set(self, key, value):
         table = self.dynamodbcli.Table(self.table_name)
         response = table.put_item(Item={self.KEY_COL: key,
-                                        self.VALUE_COL: value},
+                                        self.VALUE_COL: value
+                                        },
                                   ReturnConsumedCapacity='TOTAL')
         if response.get('ResponseMetadata')['HTTPStatusCode'] != 200:
             raise Exception(f'''Error in put_item api: {response}''')
-        self.logger.info(f'''Saved Item from {self.table_name} table response: {response}''')
+        self.logger.info(f'''Saved Item {key} from {self.table_name} table response: {response}''')
 
     def has_key(self, key):
         # Todo catch item not found in get/delete
@@ -85,7 +95,7 @@ class AWSKVStorage(KeyValueStorage):
         response = table.delete_item(Key={self.KEY_COL: key})
         if response.get('ResponseMetadata')['HTTPStatusCode'] != 200:
             raise Exception(f'''Error in delete_item api: {response}''')
-        self.logger.info(f'''Deleted Item from {self.table_name} table response: {response}''')
+        self.logger.info(f'''Deleted Item {key} from {self.table_name} table response: {response}''')
 
     def destroy(self):
         table = self.dynamodbcli.Table(self.table_name)
@@ -96,6 +106,89 @@ class AWSKVStorage(KeyValueStorage):
         except ClientError as e:
             if e.response['Error']['Code'] != 'ResourceNotFoundException':
                 raise e
+
+    def _get_lock_key(self, key):
+        return "lockon_%s" % key
+
+    def acquire_lock(self, key):
+        lock_key = self._get_lock_key(key)
+        table = self.dynamodbcli.Table(self.table_name)
+        try:
+            if self.has_key(lock_key):
+                response = table.update_item(
+                    Key={
+                        self.KEY_COL: lock_key
+                    },
+                    ReturnValues='UPDATED_NEW',
+                    ReturnConsumedCapacity='TOTAL',
+                    ReturnItemCollectionMetrics='NONE',
+                    UpdateExpression=f'''set {self.VALUE_COL} = :val1, {self.LOCK_DATE_COL} = :val3''',
+                    ConditionExpression=f'''{self.VALUE_COL} = :val2''',
+                    ExpressionAttributeValues={
+                        ':val1': decimal.Decimal('1'),
+                        ':val2': decimal.Decimal('0'),
+                        ':val3': get_current_datetime().isoformat()
+                    }
+                )
+            else:
+                # create key
+                response = table.update_item(
+                    Key={
+                        self.KEY_COL: lock_key
+                    },
+                    ReturnValues='UPDATED_NEW',
+                    ReturnConsumedCapacity='TOTAL',
+                    ReturnItemCollectionMetrics='NONE',
+                    UpdateExpression=f'''set {self.VALUE_COL} = :val1, {self.LOCK_DATE_COL} = :val3''',
+                    ConditionExpression=f'''attribute_not_exists({self.VALUE_COL})''',
+                    ExpressionAttributeValues={
+                        ':val1': decimal.Decimal('1'),
+                        ':val3': get_current_datetime().isoformat()
+                    }
+                )
+            if response.get('ResponseMetadata')['HTTPStatusCode'] != 200:
+                raise Exception(f'''Error in put_item api: {response}''')
+        except ClientError as e:
+            if e.response['Error']['Code'] == "ConditionalCheckFailedException":
+                self.logger.warning(f'''Failed to acquire lock on key: {key} Message: {e.response['Error']['Message']}''')
+            else:
+                self.logger.error(f'''Error in Acquiring lock {str(e)}''')
+            return False
+        else:
+            self.logger.info(f'''Lock acquired key: {key} Message: {response["Attributes"]}''')
+            return True
+
+    def release_lock(self, key):
+
+        lock_key = "lockon_%s" % key
+        table = self.dynamodbcli.Table(self.table_name)
+        try:
+            response = table.update_item(
+                Key={
+                    self.KEY_COL: lock_key
+                },
+                ReturnValues='UPDATED_NEW',
+                ReturnConsumedCapacity='TOTAL',
+                ReturnItemCollectionMetrics='NONE',
+                UpdateExpression=f'''set {self.VALUE_COL} = :val1''',
+                ConditionExpression=f'''{self.VALUE_COL} = :val2''',
+                ExpressionAttributeValues={
+                    ':val1': decimal.Decimal(0),
+                    ':val2': decimal.Decimal(1)
+                }
+            )
+            if response.get('ResponseMetadata')['HTTPStatusCode'] != 200:
+                raise Exception(f'''Error in put_item api: {response}''')
+        except ClientError as e:
+            if e.response['Error']['Code'] == "ConditionalCheckFailedException":
+                self.logger.warning(f'''Failed to release lock on key: {key} Message: {e.response['Error']['Message']}''')
+            else:
+                self.logger.error(f'''Error in Releasing lock {str(e)}''')
+            return False
+        else:
+            self.logger.info(f'''Lock released key: {key} Message: {response["Attributes"]}''')
+            return True
+
 
 
     @classmethod
@@ -176,6 +269,7 @@ class AWSProvider(Provider):  # should we disallow direct access to these classe
 
 
 if __name__ == "__main__":
+
     key = "abc"
     value = {"name": "Himanshu"}
     cli = ProviderFactory.get_provider("aws", region_name="us-east-1")
@@ -185,4 +279,10 @@ if __name__ == "__main__":
     print(kvstore.has_key(key) == True)
     kvstore.delete(key)
     print(kvstore.has_key(key) == False)
+    print(kvstore.acquire_lock(key) == True)
+    print(kvstore.acquire_lock(key) == False)
+    print(kvstore.acquire_lock("blah") == True)
+    print(kvstore.release_lock(key) == True)
+    print(kvstore.release_lock(key) == False)
+    print(kvstore.release_lock("blahblah") == False)
     kvstore.destroy()
