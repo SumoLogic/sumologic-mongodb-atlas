@@ -52,6 +52,12 @@ class GCPKVStorage(KeyValueStorage):
         all_keys = query.keys_only()
         self.datastore_cli.delete_multi(all_keys)
 
+    def acquire_lock(self, key):
+        pass
+
+    def release_lock(self, key):
+        pass
+
 
 class GCPProvider(Provider):
 

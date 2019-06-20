@@ -1,7 +1,4 @@
 # -*- coding: future_fstrings -*-
-from sys import path
-path.append("/Users/hpal/git/sumologic-mongodb-atlas/sumomongodbatlascollector/")
-
 from base import Provider, KeyValueStorage
 import boto3
 from datetime import datetime, timezone
@@ -106,9 +103,6 @@ class AWSKVStorage(KeyValueStorage):
         except ClientError as e:
             if e.response['Error']['Code'] != 'ResourceNotFoundException':
                 raise e
-
-    def _get_lock_key(self, key):
-        return "lockon_%s" % key
 
     def acquire_lock(self, key):
         lock_key = self._get_lock_key(key)
@@ -275,14 +269,14 @@ if __name__ == "__main__":
     cli = ProviderFactory.get_provider("aws", region_name="us-east-1")
     kvstore = cli.get_storage("keyvalue", name='kvstore', force_create=True)
     kvstore.set(key, value)
-    print(kvstore.get(key) == value)
-    print(kvstore.has_key(key) == True)
+    assert(kvstore.get(key) == value)
+    assert(kvstore.has_key(key) == True)
     kvstore.delete(key)
-    print(kvstore.has_key(key) == False)
-    print(kvstore.acquire_lock(key) == True)
-    print(kvstore.acquire_lock(key) == False)
-    print(kvstore.acquire_lock("blah") == True)
-    print(kvstore.release_lock(key) == True)
-    print(kvstore.release_lock(key) == False)
-    print(kvstore.release_lock("blahblah") == False)
+    assert(kvstore.has_key(key) == False)
+    assert(kvstore.acquire_lock(key) == True)
+    assert(kvstore.acquire_lock(key) == False)
+    assert(kvstore.acquire_lock("blah") == True)
+    assert(kvstore.release_lock(key) == True)
+    assert(kvstore.release_lock(key) == False)
+    assert(kvstore.release_lock("blahblah") == False)
     kvstore.destroy()

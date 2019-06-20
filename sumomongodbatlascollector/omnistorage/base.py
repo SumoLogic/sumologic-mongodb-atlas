@@ -68,4 +68,5 @@ class KeyValueStorage():
     def release_lock(self, key):
         pass
 
-
+    def _get_lock_key(self, key):
+        return "lockon_%s" % key

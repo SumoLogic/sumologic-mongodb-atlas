@@ -1,18 +1,8 @@
-GsuiteAlertCenter:
- SCOPES:
-    - 'https://cloud.mongodb.com/api/atlas/v1.0'
- LOG_FILES:
-    - mongodb.gz
-    - mongos.gz
-    - mongosqld.gz
-    # - mongodb-audit-log.gz
-    # - mongos-audit-log.gz
-
- DELEGATED_EMAIL: null
- VERSION: "v1beta1"
+MongoDBAtlas:
+ BASE_URL: "https://cloud.mongodb.com/api/atlas/v1.0"
  FETCH_METHOD: get
  PAGINATION_LIMIT: 100
- CREDENTIALS_FILEPATH: null
+
 
 Logging:
  LOG_FORMAT: "%(levelname)s | %(asctime)s | %(threadName)s | %(name)s | %(message)s"
@@ -33,7 +23,9 @@ Collection:
  MAX_PAYLOAD_BYTESIZE: 500000
  END_TIME_EPOCH_OFFSET_SECONDS: 120
  BACKFILL_DAYS: 1
- DBNAME: "gsuitealertcenter"
+ DBNAME: "mongodbatlas"
 
 SumoLogic:
- SUMO_ENDPOINT: null
+ LOGS_SUMO_ENDPOINT: ""
+ METRICS_SUMO_ENDPOINT: ""
+

@@ -2,9 +2,15 @@
 import shelve
 import threading
 import os
-from sumoclient.utils import get_logger
+from factory import ProviderFactory
+from common.logger import get_logger
 from omnistorage.base import Provider, KeyValueStorage
 import datetime
+import tempfile
+
+
+if sys.platform != "win32":
+    import fcntl
 
 
 class OnPremKVStorage(KeyValueStorage):
@@ -24,6 +30,7 @@ class OnPremKVStorage(KeyValueStorage):
     '''
 
     def setup(self, name, force_create=False, *args, **kwargs):
+        self.key_locks = {}
         self.lock = threading.RLock()
         cur_dir = os.path.dirname(__file__)
         self.file_name = os.path.join(cur_dir, name)
@@ -94,6 +101,63 @@ class OnPremKVStorage(KeyValueStorage):
         except OSError as e:
             raise Exception(f'''Error in removing {e.filename}:  {e.strerror}''')
 
+    def acquire_lock(self, key):
+        # In onprem these are actually process level locks so another process won't be able to access the key. This is because thread level locking is implemented via self.Lock
+        # Todo move to context manager and have exclusive and shared lock option
+        lockkey = self._get_lock_key(key)
+        lockfile = os.path.normpath(tempfile.gettempdir() + '/' + lockkey)
+
+        if sys.platform == 'win32':
+            try:
+                # file already exists, we try to remove (in case previous
+                # execution was interrupted)
+                if os.path.exists(lockfile):
+                    os.unlink(lockfile)
+                self.key_locks[lockkey] = os.open(lockfile, os.O_CREAT | os.O_EXCL | os.O_RDWR | os.O_NONBLOCK) # is this non blocking?
+                self.logger.debug("acquired_lock lockfile: %s" % lockfile)
+                return True
+            except OSError:
+                _, e, tb = sys.exc_info()
+                if e.errno == 13:
+                    self.logger.warning("Another instance is already running, quitting. %s" % (e))
+                    return False
+                else:
+                    raise
+        else:  # non Windows
+            if lockkey not in self.key_locks:
+                self.key_locks[lockkey] = open(lockfile, 'w')
+                self.key_locks[lockkey].flush()
+            try:
+                fcntl.lockf(self.key_locks[lockkey], fcntl.LOCK_EX | fcntl.LOCK_NB) # non blocking
+                self.logger.debug("acquired_lock lockfile: %s" % lockfile)
+                return True
+            except IOError:
+                self.logger.warning("Another instance is already running, quitting.")
+                return False
+
+    def release_lock(self, key):
+        lockkey = self._get_lock_key(key)
+        lockfile = os.path.normpath(tempfile.gettempdir() + '/' + lockkey)
+        if lockkey in self.key_locks:
+            try:
+                if sys.platform == 'win32':
+                    os.close(self.key_locks[lockkey])
+                else:
+                    fcntl.lockf(self.key_locks[lockkey], fcntl.LOCK_UN)
+                    # os.close(self.fp)
+                    self.key_locks[lockkey].close()
+                if os.path.isfile(lockfile):
+                    os.unlink(lockfile)
+                del self.key_locks[lockkey]
+                self.logger.debug("released_lock lockfile: %s" % lockfile)
+                return True
+            except Exception as e:
+                self.logger.error("release_lock error")
+                raise
+        else:
+            self.logger.warning("lock not found lockfile: %s" % lockfile)
+            return False
+
 
 class OnPremProvider(Provider):
 
@@ -104,3 +168,26 @@ class OnPremProvider(Provider):
         return OnPremKVStorage(name, *args, **kwargs)
 
 
+if __name__ == "__main__":
+
+    key = "abc"
+    value = {"name": "Himanshu"}
+    cli = ProviderFactory.get_provider("onprem")
+    kvstore = cli.get_storage("keyvalue", name='kvstore', force_create=True)
+
+    cli2 = ProviderFactory.get_provider("onprem")
+    kvstore2 = cli.get_storage("keyvalue", name='kvstore', force_create=True)
+
+    kvstore.set(key, value)
+    assert(kvstore.get(key) == value)
+    assert(kvstore.has_key(key) == True)
+    kvstore.delete(key)
+    assert(kvstore.has_key(key) == False)
+    # import ipdb;ipdb.set_trace()
+    assert(kvstore.acquire_lock(key) == True)
+    assert(kvstore2.acquire_lock(key) == True)
+    assert(kvstore.acquire_lock("blah") == True)
+    assert(kvstore.release_lock(key) == True)
+    assert(kvstore.release_lock(key) == False)
+    assert(kvstore.release_lock("blahblah") == False)
+    kvstore.destroy()
