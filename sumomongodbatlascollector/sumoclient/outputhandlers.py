@@ -14,7 +14,7 @@ class HTTPHandler(BaseOutputHandler):
         self.collection_config = config['Collection']
         self.sumoconn = SessionPool(self.collection_config['MAX_RETRY'], self.collection_config['BACKOFF_FACTOR'])
 
-    def send(self, data, extra_headers=None, jsondump=True):
+    def send(self, data, extra_headers=None, jsondump=True, endpoint_key='SUMO_ENDPOINT'):
         if not data:
             return True
         sess = self.sumoconn.get_request_session()
@@ -36,7 +36,7 @@ class HTTPHandler(BaseOutputHandler):
                 body = zlib.compress(body)
                 headers.update({"Content-Encoding": "deflate"})
 
-            fetch_success, respjson = ClientMixin.make_request(self.sumo_config['SUMO_ENDPOINT'], method="post",
+            fetch_success, respjson = ClientMixin.make_request(self.sumo_config[endpoint_key], method="post",
                                                                session=sess, data=body, TIMEOUT=self.collection_config['TIMEOUT'],
                                                                headers=headers)
             if not fetch_success:

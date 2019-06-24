@@ -15,8 +15,7 @@ class GCPKVStorage(KeyValueStorage):
         self.logger = get_logger(__name__)
         if force_create:
             self.destroy()
-        # if not self.table_exists(self.table_name, self.region_name):
-        #     self._create_table()
+
 
     def get(self, key, raise_exc=False):
         entity_key = self.datastore_cli.key(self.table_name, key)

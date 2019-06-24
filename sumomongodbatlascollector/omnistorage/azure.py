@@ -1,23 +1,11 @@
 # -*- coding: future_fstrings -*-
-from base import Provider, KeyValueStorage
-import boto3
-
-from factory import ProviderFactory
-from utils import get_logger
+from omnistorage.base import Provider, KeyValueStorage
+from omnistorage.factory import ProviderFactory
+from common.logger import get_logger
 import json
 import os
 import decimal
-from botocore.exceptions import ClientError
 
-
-class DecimalEncoder(json.JSONEncoder):
-    def default(self, o):
-        if isinstance(o, decimal.Decimal):
-            if o % 1 > 0:
-                return float(o)
-            else:
-                return int(o)
-        return super(DecimalEncoder, self).default(o)
 
 
 class AWSKVStorage(KeyValueStorage):

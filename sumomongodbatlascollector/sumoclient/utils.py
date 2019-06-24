@@ -6,14 +6,19 @@ import dateutil.parser
 from common.logger import get_logger
 
 
-def get_current_timestamp():
+def get_current_timestamp(milliseconds=False):
     # The time.time() function returns the number of seconds since the epoch, as seconds. Note that the "epoch" is defined as the start of January 1st, 1970 in UTC.
-    return time.time()
+    if milliseconds:
+        return int(time.time()*1000)
+    else:
+        return int(time.time())
 
 
-def convert_epoch_to_utc_date(timestamp, date_format="%Y-%m-%d %H:%M:%S"):
+def convert_epoch_to_utc_date(timestamp, date_format="%Y-%m-%d %H:%M:%S", milliseconds=False):
     log = get_logger(__name__)
     try:
+        if milliseconds:
+            timestamp = timestamp/1000.0
         date_str = datetime.utcfromtimestamp(timestamp).strftime(date_format)
     except Exception as e:
         log.error(f'''Error in converting timestamp {timestamp}''', exc_info=True)

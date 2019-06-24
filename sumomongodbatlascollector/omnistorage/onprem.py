@@ -2,11 +2,11 @@
 import shelve
 import threading
 import os
-from factory import ProviderFactory
-from common.logger import get_logger
-from omnistorage.base import Provider, KeyValueStorage
 import datetime
 import tempfile
+from common.logger import get_logger
+from omnistorage.factory import ProviderFactory
+from omnistorage.base import Provider, KeyValueStorage
 
 
 if sys.platform != "win32":
@@ -166,6 +166,7 @@ class OnPremProvider(Provider):
 
     def get_kvstorage(self, name, *args, **kwargs):
         return OnPremKVStorage(name, *args, **kwargs)
+
 
 
 if __name__ == "__main__":

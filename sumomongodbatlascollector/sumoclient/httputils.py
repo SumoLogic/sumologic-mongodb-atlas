@@ -27,8 +27,8 @@ class ClientMixin(object):
     def make_request(cls, url, method="get", session=None, TIMEOUT=5, is_file=False, **kwargs):
         log = get_logger(__name__)
         start_time = datetime.now()
+        sess = session if session else cls.get_new_session()
         try:
-            sess = session if session else cls.get_new_session()
             resp = getattr(sess, method)(url, timeout=TIMEOUT, **kwargs)
             if 400 <= resp.status_code < 600:
                 resp.reason = resp.text
@@ -46,19 +46,19 @@ class ClientMixin(object):
         except JSONDecodeError as err:
             log.error(f'''Error in Decoding response {err}''', exc_info=True)
         except requests.exceptions.HTTPError as err:
-            log.error(f'''Http Error: {err} {resp.content} {resp.status_code} {kwargs}''', exc_info=True)
+            log.error(f'''Http Error: {err}  {kwargs}''', exc_info=True)
         except requests.exceptions.ConnectionError as err:
-            log.error(f'''Connection Error:{err} {resp.content} {resp.status_code} {kwargs}''', exc_info=True)
+            log.error(f'''Connection Error:{err}  {kwargs}''', exc_info=True)
         except requests.exceptions.Timeout as err:
             time_elapsed = datetime.now() - start_time
-            log.error(f'''Timeout Error:{err} {resp.content} {resp.status_code} {kwargs} {time_elapsed}''', exc_info=True)
+            log.error(f'''Timeout Error:{err}  {kwargs} {time_elapsed}''', exc_info=True)
         except requests.exceptions.RequestException as err:
-            log.error(f'''Error: {err} {resp.content} {resp.status_code} {kwargs}''', exc_info=True)
+            log.error(f'''Error: {err}  {kwargs}''', exc_info=True)
         finally:
             if not session:
                 # if session was not input then deleting the current session
                 sess.close()
-        return False, resp.reason or resp.raw.reason
+        return False, ""
 
 
 class SessionPool(object):

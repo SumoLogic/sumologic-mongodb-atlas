@@ -1,26 +1,24 @@
 # -*- coding: future_fstrings -*-
+
 import traceback
 import sys
 import time
 import os
-import datetime
 from concurrent import futures
+import datetime
+from requests.auth import HTTPDigestAuth
 from common.logger import get_logger
+from sumoclient.httputils import ClientMixin
 from omnistorage.factory import ProviderFactory
-from sumoclient.factory import OutputHandlerFactory
-from sumoclient.utils import get_current_timestamp, convert_epoch_to_utc_date, convert_utc_date_to_epoch
+from sumoclient.utils import get_current_timestamp
 from common.config import Config
-from oauth2client.service_account import ServiceAccountCredentials
-from googleapiclient.discovery import build
+from api import ProcessMetricsAPI, ProjectEventsAPI, OrgEventsAPI, DiskMetricsAPI, LogAPI, AlertsAPI, DatabaseMetricsAPI
 
 
 class MongoDBAtlasCollector(object):
 
     CONFIG_FILENAME = "mongodbatlas.yaml"
-    STOP_TIME_OFFSET_SECONDS = 10
-    DATE_FORMAT = '%Y-%m-%dT%H:%M:%S.%fZ'
-    MOVING_WINDOW_DELTA = 0.001
-    FUNCTION_TIMEOUT = 5*60
+
 
     def __init__(self):
         self.start_time = datetime.datetime.utcnow()
@@ -32,150 +30,199 @@ class MongoDBAtlasCollector(object):
         self.api_config = self.config['MongoDBAtlas']
         op_cli = ProviderFactory.get_provider(self.collection_config['ENVIRONMENT'])
         self.kvstore = op_cli.get_storage("keyvalue", name=self.config['Collection']['DBNAME'])
-        self.DEFAULT_START_TIME_EPOCH = get_current_timestamp() - self.collection_config['BACKFILL_DAYS']*24*60*60
-
+        self.digestauth = HTTPDigestAuth(username=self.api_config['PUBLIC_KEY'], password=self.api_config['PRIVATE_KEY'])
 
     def get_current_dir(self):
         cur_dir = os.path.dirname(__file__)
         return cur_dir
 
-    def set_fetch_state(self, alert_type, start_time_epoch, end_time_epoch, pageToken=None):
-        if end_time_epoch:  # end time epoch could be none in cases where no event is present
-            assert start_time_epoch <= end_time_epoch
-        obj = {
-            "pageToken": pageToken,
-            "alert_type": alert_type,
-            "start_time_epoch": start_time_epoch,
-            "end_time_epoch": end_time_epoch
-        }
-
-        self.kvstore.set(alert_type, obj)
-        return obj
-
-    def build_params(self, alert_type, start_time_epoch, end_time_epoch, pageToken, page_size):
-        params = {
-            'pageSize': page_size,
-            'pageToken': pageToken,
-            'filter': f'''create_time >= \"{convert_epoch_to_utc_date(start_time_epoch, self.DATE_FORMAT)}\" AND create_time <= \"{convert_epoch_to_utc_date(end_time_epoch, self.DATE_FORMAT)}\" AND type = \"{alert_type}\"''',
-            'orderBy': "create_time desc"
-        }
-        return params
-
-    def set_new_end_epoch_time(self, alert_type, start_time_epoch):
-        end_time_epoch = get_current_timestamp() - self.collection_config['END_TIME_EPOCH_OFFSET_SECONDS']
-        params = self.build_params(alert_type, start_time_epoch, end_time_epoch, None, 1)
-        response = self.alertcli.alerts().list(**params).execute()
-        start_date = convert_epoch_to_utc_date(start_time_epoch, self.DATE_FORMAT)
-        end_date = convert_epoch_to_utc_date(end_time_epoch, self.DATE_FORMAT)
-        if response.get("alerts") and len(response["alerts"]) > 0:
-            new_end_date = response["alerts"][0]["createTime"]
-            new_end_time_epoch = convert_utc_date_to_epoch(new_end_date)
-            obj = self.set_fetch_state(alert_type, start_time_epoch, new_end_time_epoch)
-            self.log.info(f'''Creating task for {alert_type} from {start_date} to {new_end_date}''')
-            return obj
-        else:
-            self.log.info(f'''No events are available for {alert_type} from {start_date} to {end_date}''')
-            return None
-
-    def transform_data(self, data):
-        # import random
-        # srcip = ["216.161.180.148", "54.203.63.36"]
-        for d in data:
-            d["createTime"] = convert_epoch_to_utc_date(int(time.time()), self.DATE_FORMAT)
-        return data
-
-    def is_time_remaining(self):
-        now = datetime.datetime.utcnow()
-        time_passed =  (now - self.start_time).total_seconds()
-        self.log.info("checking time_passed: %s" % time_passed)
-        return time_passed + self.STOP_TIME_OFFSET_SECONDS < self.FUNCTION_TIMEOUT
-
-    def fetch(self, alert_type, start_time_epoch, end_time_epoch, pageToken):
-        params = self.build_params(alert_type, start_time_epoch, end_time_epoch, pageToken, self.api_config['PAGINATION_LIMIT'])
-        output_handler = OutputHandlerFactory.get_handler(self.config['Collection']['OUTPUT_HANDLER'], path="%s.json" % alert_type, config=self.config)
-        next_request = True
-        send_success = has_next_page = False
-        count = 0
-        alertcli = self.get_alert_client()
-
+    def getpaginateddata(self, url, **kwargs):
+        page_num = 0
+        all_data = []
+        sess = ClientMixin.get_new_session()
         try:
-            while next_request:
-                count += 1
-                response = alertcli.alerts().list(**params).execute()
-                fetch_success = response.get("alerts")
-                if fetch_success:
-                    data = response["alerts"]
-                    data = self.transform_data(data)
-                    send_success = output_handler.send(data)
-                    # Todo save data and separate out fetching and sending pipelines
-                    params['pageToken'] = response.get('next_page_token') if send_success else params['pageToken']
-                    has_next_page = True if params['pageToken'] else False
-                    self.log.info(f'''Finished Fetching Page: {count} Event Type: {alert_type} Datalen: {len(data)} starttime: {convert_epoch_to_utc_date(start_time_epoch, self.DATE_FORMAT)} endtime: {convert_epoch_to_utc_date(end_time_epoch, self.DATE_FORMAT)}''')
-                is_data_ingested  = fetch_success and send_success
-                next_request = is_data_ingested and has_next_page and self.is_time_remaining()
-
-                if not (is_data_ingested or self.is_time_remaining()):  # saving in case of failures or function timeout
-                    self.set_fetch_state(alert_type, start_time_epoch, end_time_epoch, params["pageToken"])
-                elif not has_next_page:
-                    self.log.info(f'''Moving starttime window for {alert_type} to {convert_epoch_to_utc_date(end_time_epoch + self.MOVING_WINDOW_DELTA, self.DATE_FORMAT)}''')
-                    self.set_fetch_state(alert_type, end_time_epoch + self.MOVING_WINDOW_DELTA, None)
-
-
+            while True:
+                page_num += 1
+                status, data = ClientMixin.make_request(url, method="get", session=sess, TIMEOUT=60, **kwargs)
+                if status and "results" in data and len(data['results']) > 0:
+                    all_data.append(data)
+                    kwargs['params']['pageNum'] = page_num + 1
+                else:
+                    break
         finally:
-            output_handler.close()
-        self.log.info(f''' Total Pages fetched {count} for Event Type: {alert_type}''')
+            sess.close()
+        return all_data
+
+    def _get_all_databases(self, process_ids):
+        database_names = []
+        for process_id in process_ids:
+            url = f'''{self.api_config['BASE_URL']}/groups/{self.api_config['PROJECT_ID']}/processes/{process_id}/databases'''
+            kwargs = {'auth': self.digestauth, "params": {"itemsPerPage": 500}}
+            all_data = self.getpaginateddata(url, **kwargs)
+            database_names.extend([obj['databaseName'] for data in all_data for obj in data['results']])
+        return list(set(database_names))
+
+    def _get_all_processes_from_project(self):
+        url = f'''{self.api_config['BASE_URL']}/groups/{self.api_config['PROJECT_ID']}/processes'''
+        kwargs = {'auth': self.digestauth, "params": {"itemsPerPage": 500}}
+        all_data = self.getpaginateddata(url, **kwargs)
+        process_ids = [obj['id'] for data in all_data for obj in data['results']]
+        hostnames = [obj['hostname'] for data in all_data for obj in data['results']]
+        # 'port': 27017, 'replicaSetName': 'M10AWSTestCluster-config-0', 'typeName': 'SHARD_CONFIG_PRIMARY'
+
+        hostnames = list(set(hostnames))
+        return process_ids, hostnames
+
+    def _get_all_disks_from_host(self, process_ids):
+        disks = []
+        for process_id in process_ids:
+            url = f'''{self.api_config['BASE_URL']}/groups/{self.api_config['PROJECT_ID']}/processes/{process_id}/disks'''
+            kwargs = {'auth': self.digestauth, "params": {"itemsPerPage": 500}}
+            all_data = self.getpaginateddata(url, **kwargs)
+            disks.extend([obj['partitionName'] for data in all_data for obj in data['results']])
+        return list(set(disks))
+
+    def _set_database_names(self, process_ids):
+        database_names = self._get_all_databases(process_ids)
+        self.kvstore.set("database_names", {"last_set_date": get_current_timestamp(milliseconds=True), "values": database_names})
+
+    def _set_processes(self):
+        process_ids, hostnames = self._get_all_processes_from_project()
+        self.kvstore.set("processes", {"last_set_date": get_current_timestamp(milliseconds=True), "process_ids": process_ids, "hostnames": hostnames})
+
+    def _set_disk_names(self, process_ids):
+        disks = self._get_all_disks_from_host(process_ids)
+        self.kvstore.set("disk_names", {"last_set_date": get_current_timestamp(milliseconds=True), "values": disks})
+
+    def _get_database_names(self):
+        if not self.kvstore.has_key('database_names'):
+            process_ids, _ = self._get_process_names()
+            self._set_database_names(process_ids)
+
+        current_timestamp = get_current_timestamp(milliseconds=True)
+        if current_timestamp - self.kvstore.get('database_names')['last_set_date'] > 60*60*1000:
+            process_ids, _ = self._get_process_names()
+            self._set_database_names(process_ids)
+
+        database_names = self.kvstore.get('database_names')['values']
+        return database_names
+
+    def _get_disk_names(self):
+        if not self.kvstore.has_key('disk_names'):
+            process_ids, _ = self._get_process_names()
+            self._set_disk_names(process_ids)
+
+        current_timestamp = get_current_timestamp(milliseconds=True)
+        if current_timestamp - self.kvstore.get('disk_names')['last_set_date'] > 60*60*1000:
+            process_ids, _ = self._get_process_names()
+            self._set_disk_names(process_ids)
+
+        disk_names = self.kvstore.get('disk_names')["values"]
+        return disk_names
+
+    def _get_process_names(self):
+        if not self.kvstore.has_key('processes'):
+            self._set_processes()
+
+        current_timestamp = get_current_timestamp()
+        if current_timestamp - self.kvstore.get('processes')['last_set_date'] > 60*60*1000:
+            self._set_processes()
+
+        processes = self.kvstore.get('processes')
+        process_ids, hostnames = processes['process_ids'], processes['hostnames']
+        return process_ids, hostnames
+
+    def is_running(self):
+        self.log.info("Acquiring single instance lock")
+        return self.kvstore.acquire_lock('is_running')
+
+    def stop_running(self):
+        self.log.info("Releasing single instance lock")
+        return self.kvstore.release_lock('is_running')
 
     def build_task_params(self):
-        PROJECT_ID = "5cd0343ff2a30b3880beddb0"
-        CLUSTER_NAME = "MongoDbTestCluster"
+
+        audit_files = ["mongodb-audit-log.gz", "mongos-audit-log.gz"]
+        dblog_files = ["mongodb.gz", "mongos.gz"]
+        filenames = []
         tasks = []
-        for alert_type in self.api_config['ALERT_TYPES']:
-            if self.kvstore.has_key(alert_type):
-                obj = self.kvstore.get(alert_type)
-                if obj["end_time_epoch"] is None:
-                    obj = self.set_new_end_epoch_time(alert_type, obj["start_time_epoch"])
-            else:
-                obj = self.set_new_end_epoch_time(alert_type, self.DEFAULT_START_TIME_EPOCH)
-            if obj is None:  # no new events so continue
-                continue
-            tasks.append(obj)
-        self.log.info(f'''Building tasks {len(tasks)}''')
+        process_ids, hostnames = self._get_process_names()
+
+        if "DATABASE" in self.api_config['LOG_TYPES']:
+            filenames.extend(dblog_files)
+        if "AUDIT" in self.api_config['LOG_TYPES']:
+            filenames.extend(audit_files)
+
+        for filename in filenames:
+            for hostname in hostnames:
+                tasks.append(LogAPI(self.kvstore, hostname, filename, self.config))
+
+        if "EVENTS_PROJECT" in self.api_config['LOG_TYPES']:
+            tasks.append(ProjectEventsAPI(self.kvstore, self.config))
+
+        if "EVENTS_ORG" in self.api_config['LOG_TYPES']:
+            tasks.append(OrgEventsAPI(self.kvstore, self.config))
+
+        if "ALERTS" in self.api_config['LOG_TYPES']:
+            tasks.append(AlertsAPI(self.kvstore, self.config))
+
+        if self.api_config['METRIC_TYPES']:
+            if "PROCESS_METRICS" in self.api_config['METRIC_TYPES']:
+                for process_id in process_ids:
+                    tasks.append(ProcessMetricsAPI(self.kvstore, process_id, self.config))
+
+            if "DISK_METRICS" in self.api_config['METRIC_TYPES']:
+                disk_names = self._get_disk_names()
+                for process_id in process_ids:
+                    for disk_name in disk_names:
+                        tasks.append(DiskMetricsAPI(self.kvstore, process_id, disk_name, self.config))
+
+            if "DATABASE_METRICS" in self.api_config['METRIC_TYPES']:
+                database_names = self._get_database_names()
+                for process_id in process_ids:
+                    for database_name in database_names:
+                        tasks.append(DatabaseMetricsAPI(self.kvstore, process_id, database_name, self.config))
+
         return tasks
 
     def run(self):
-        self.log.info('Starting MongoDB Atlas Forwarder...')
-        task_params = self.build_task_params()
-        all_futures = {}
-        self.log.info("spawning %d workers" % self.config['Collection']['NUM_WORKERS'])
-        with futures.ThreadPoolExecutor(max_workers=self.config['Collection']['NUM_WORKERS']) as executor:
-            results = {executor.submit(self.fetch, **param): param for param in task_params}
-            all_futures.update(results)
-        for future in futures.as_completed(all_futures):
-            param = all_futures[future]
-            alert_type = param["alert_type"]
+        if self.is_running():
             try:
-                future.result()
-                obj = self.kvstore.get(alert_type)
-            except Exception as exc:
-                self.log.error(f'''Alert Type: {alert_type} thread generated an exception: {exc}''', exc_info=True)
-            else:
-                self.log.info(f'''Alert Type: {alert_type} thread completed {obj}''')
+                self.log.info('Starting MongoDB Atlas Forwarder...')
+                task_params = self.build_task_params()
+                all_futures = {}
+                self.log.info("spawning %d workers" % self.config['Collection']['NUM_WORKERS'])
+                with futures.ThreadPoolExecutor(max_workers=self.config['Collection']['NUM_WORKERS']) as executor:
+                    results = {executor.submit(apiobj.fetch): apiobj for apiobj in task_params}
+                    all_futures.update(results)
+                for future in futures.as_completed(all_futures):
+                    param = all_futures[future]
+                    alert_type = param["alert_type"]
+                    try:
+                        future.result()
+                        obj = self.kvstore.get(alert_type)
+                    except Exception as exc:
+                        self.log.error(f'''Alert Type: {alert_type} thread generated an exception: {exc}''', exc_info=True)
+                    else:
+                        self.log.info(f'''Alert Type: {alert_type} thread completed {obj}''')
+            finally:
+                self.stop_running()
 
     def test(self):
-        params = {
-            "start_time_epoch": 1505228760,
-            "end_time_epoch": int(time.time()),
-            "alert_type": "User reported phishing",
-            "pageToken": None
-        }
-        self.fetch(**params)
+        if self.is_running():
+            try:
+                for apiobj in self.build_task_params():
+                    apiobj.fetch()
+            finally:
+                self.stop_running()
 
 
 def main(context=None):
+
     try:
         ns = MongoDBAtlasCollector()
-        ns.run()
-        # ns.test()
+        # ns.run()
+        ns.test()
     except BaseException as e:
         traceback.print_exc()
 
