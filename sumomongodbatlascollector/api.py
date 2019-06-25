@@ -1,3 +1,5 @@
+# -*- coding: future_fstrings -*-
+
 import gzip
 import json
 from abc import abstractmethod

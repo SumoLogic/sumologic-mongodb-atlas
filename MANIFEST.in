@@ -1,0 +1,6 @@
+include requirements.txt
+include LICENSE
+include VERSION
+include sumomongodbatlascollector/mongodbatlas.yaml
+exclude sumomongodbatlascollector/apidemo.py
+exclude sumomongodbatlascollector/sumoclient/auth.py
