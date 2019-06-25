@@ -1,0 +1,54 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'This solution consists of a lambda functions which is used to fetch
+  logs from MongoDBAtlas and ingest to Sumo Logic.
+
+  '
+Outputs:
+  MongoDBAtlasSchedulerFunction:
+    Description: MongoDBAtlasScheduler Function ARN
+    Value:
+      Fn::GetAtt:
+      - MongoDBAtlasSchedulerFunction
+      - Arn
+Parameters:
+  LOGS_SUMO_ENDPOINT:
+    Type: String
+  METRICS_SUMO_ENDPOINT:
+    Type: String
+  ORGANIZATION_ID:
+    Type: String
+  PROJECT_ID:
+    Type: String
+  PRIVATE_KEY:
+    Type: String
+  PUBLIC_KEY:
+    Type: String
+Resources:
+  MongoDBAtlasSchedulerFunction:
+    Properties:
+      CodeUri: s3://appdevstore/MongoDBAtlas.zip
+      Environment:
+        Variables:
+          LOGS_SUMO_ENDPOINT: Ref LOGS_SUMO_ENDPOINT
+          METRICS_SUMO_ENDPOINT: Ref METRICS_SUMO_ENDPOINT
+          ORGANIZATION_ID: Ref ORGANIZATION_ID
+          PROJECT_ID: Ref PROJECT_ID
+          PRIVATE_KEY: Ref PRIVATE_KEY
+          PUBLIC_KEY: Ref PUBLIC_KEY
+      Events:
+        MongoDBAtlasScheduleRule:
+          Properties:
+            Schedule: rate(5 minutes)
+          Type: Schedule
+      Handler: main.main
+#      Layers:
+#      - Fn::Sub: arn:aws:lambda:${AWS::Region}:956882708938:layer:securityhub_deps:1
+      MemorySize: 256
+      Policies:
+          - AmazonDynamoDBFullAccess
+#          - LambdaInvokePolicy:
+#              FunctionName: Ref: MongoDBAtlasSchedulerFunction
+      Runtime: python3.7
+      Timeout: 300
+    Type: AWS::Serverless::Function
+Transform: AWS::Serverless-2016-10-31

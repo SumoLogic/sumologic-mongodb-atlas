@@ -1,17 +1,18 @@
 import gzip
 import json
+from abc import abstractmethod
 from io import BytesIO
 import datetime
 from requests.auth import HTTPDigestAuth
 from sumoclient.factory import OutputHandlerFactory
-from sumoclient.utils import get_current_timestamp, convert_epoch_to_utc_date, convert_utc_date_to_epoch
+from sumoclient.utils import get_current_timestamp, convert_epoch_to_utc_date, convert_utc_date_to_epoch, convert_date_to_epoch
 from common.logger import get_logger
 from sumoclient.httputils import ClientMixin
 
 
 class BaseAPI(object):
     # pagination/auth/abstracts
-    MOVING_WINDOW_DELTA = 1    # 1ms
+    MOVING_WINDOW_DELTA = 0.001
     STOP_TIME_OFFSET_SECONDS = 10
     FUNCTION_TIMEOUT = 5*60
     isoformat = '%Y-%m-%dT%H:%M:%S.%fZ'
@@ -25,7 +26,7 @@ class BaseAPI(object):
         self.collection_config = self.config['Collection']
         self.api_config = self.config['MongoDBAtlas']
         self.digestauth = HTTPDigestAuth(username=self.api_config['PUBLIC_KEY'], password=self.api_config['PRIVATE_KEY'])
-        self.DEFAULT_START_TIME_EPOCH = get_current_timestamp(milliseconds=True) - self.collection_config['BACKFILL_DAYS']*24*60*60
+        self.DEFAULT_START_TIME_EPOCH = get_current_timestamp() - self.collection_config['BACKFILL_DAYS']*24*60*60
         self.log = get_logger(__name__, force_create=True, **self.config['Logging'])
 
     def get_function_timeout(self):
@@ -46,9 +47,40 @@ class BaseAPI(object):
             self.log.info("Shutting down not enough time")
         return has_time
 
+    def __str__(self):
+        return self._get_key()
+
+    @abstractmethod
+    def _get_key(self):
+        pass
+
+    @abstractmethod
+    def save_state(self, last_time_epoch):
+        pass
+
+    @abstractmethod
+    def get_state(self):
+        pass
+
+    @abstractmethod
+    def build_fetch_params(self):
+        pass
+
+    @abstractmethod
+    def build_send_params(self):
+        pass
+
+    @abstractmethod
+    def transform_data(self, content):
+        pass
+
+    @abstractmethod
+    def fetch(self):
+        pass
 
 class LogAPI(BaseAPI):
     # single API
+    MOVING_WINDOW_DELTA = 1 # This api does not take ms
     pathname = "db_logs.json"
 
     def __init__(self, kvstore, hostname, filename, config):
@@ -74,10 +106,10 @@ class LogAPI(BaseAPI):
 
     def build_fetch_params(self):
         start_time_epoch = self.get_state()['last_time_epoch']+self.MOVING_WINDOW_DELTA
-        end_time_epoch = get_current_timestamp(milliseconds=True) - self.collection_config['END_TIME_EPOCH_OFFSET_SECONDS']
+        end_time_epoch = get_current_timestamp() - self.collection_config['END_TIME_EPOCH_OFFSET_SECONDS']
         return f'''{self.api_config['BASE_URL']}/groups/{self.api_config['PROJECT_ID']}/clusters/{self.hostname}/logs/{self.filename}''', {
                 "auth": self.digestauth,
-                "params": {"startDate": start_time_epoch, "endDate": end_time_epoch},
+                "params": {"startDate": int(start_time_epoch), "endDate": int(end_time_epoch)}, # this api does not take ms
                 "headers": {"Accept": "application/gzip"},
                 "is_file": True
             }
@@ -97,18 +129,29 @@ class LogAPI(BaseAPI):
         results = gzip.GzipFile(fileobj=BytesIO(content))
         for line in results.readlines():
             if "audit" in self.filename:
-                import ipdb;ipdb.set_trace()
                 msg = json.loads(line.decode('utf-8'))
-                msg['PROJECT_ID'] = self.api_config['PROJECT_ID']
+                msg['project_id'] = self.api_config['PROJECT_ID']
                 msg['hostname'] = self.hostname
+                msg['cluster_name'] = self.hostname.split("-", 1)[0].strip()
+                current_date = msg['ts']['$date']
+
             else:
-                import ipdb;ipdb.set_trace()
                 msg = {
                     'msg': line.decode('utf-8').strip(),
-                    'PROJECT_ID': self.api_config['PROJECT_ID'],
-                    'hostname': self.hostname
+                    'project_id': self.api_config['PROJECT_ID'],
+                    'hostname': self.hostname,
+                    'cluster_name': self.hostname.split("-", 1)[0].strip()
                 }
-            all_logs.append(msg)
+                current_date = msg['msg'].split(" ", 1)[0]
+
+            try:
+                current_timestamp = convert_date_to_epoch(current_date.strip())
+                msg['created'] = current_date # taking out date
+                last_time_epoch = max(current_timestamp, last_time_epoch)
+                all_logs.append(msg)
+            except ValueError:
+                all_logs[-1]['msg'] += msg['msg']
+
         return all_logs, {"last_time_epoch": last_time_epoch}
 
     def fetch(self):
@@ -117,6 +160,7 @@ class LogAPI(BaseAPI):
         output_handler = OutputHandlerFactory.get_handler(self.collection_config['OUTPUT_HANDLER'], path=self.pathname, config=self.config)
         url, kwargs = self.build_fetch_params()
         try:
+
             fetch_success, content = ClientMixin.make_request(url, method="get", TIMEOUT=60, **kwargs)
             if fetch_success and len(content) > 0:
                 payload, state = self.transform_data(content)
@@ -163,14 +207,16 @@ class ProcessMetricsAPI(BaseAPI):
 
     def build_fetch_params(self):
         start_time_epoch = self.get_state()['last_time_epoch']+self.MOVING_WINDOW_DELTA
-        end_time_epoch = get_current_timestamp(milliseconds=True) - self.collection_config['END_TIME_EPOCH_OFFSET_SECONDS']
-        start_time_date = convert_epoch_to_utc_date(start_time_epoch, date_format=self.isoformat, milliseconds=True)
-        end_time_date = convert_epoch_to_utc_date(end_time_epoch, date_format=self.isoformat, milliseconds=True)
+        end_time_epoch = get_current_timestamp() - self.collection_config['END_TIME_EPOCH_OFFSET_SECONDS']
+        start_time_date = convert_epoch_to_utc_date(start_time_epoch, date_format=self.isoformat)
+        end_time_date = convert_epoch_to_utc_date(end_time_epoch, date_format=self.isoformat)
         return f'''{self.api_config['BASE_URL']}/groups/{self.api_config['PROJECT_ID']}/processes/{self.process_id}/measurements''', {
                 "auth": self.digestauth,
                 "params": { "itemsPerPage": self.api_config['PAGINATION_LIMIT'], "granularity": "PT1M",
-                 "start": start_time_date, "end": end_time_date
-            }}
+                            "start": start_time_date, "end": end_time_date
+                    # , "m": self.api_config["METRIC_TYPES"]["PROCESS_METRICS"]
+                }
+        }
 
     def build_send_params(self):
         return {
@@ -184,9 +230,12 @@ class ProcessMetricsAPI(BaseAPI):
         last_time_epoch = self.DEFAULT_START_TIME_EPOCH
         for measurement in data['measurements']:
             for datapoints in measurement['dataPoints']:
-                    if datapoints['value'] is None:
-                        continue
-                    metrics.append(f'''projectId={data['groupId']} hostId={data['hostId']} processId={data['processId']} metric={measurement['name']}  units={measurement['units']} {datapoints['value']} {convert_utc_date_to_epoch(datapoints['timestamp'], date_format=self.date_format, milliseconds=True)}''')
+                if datapoints['value'] is None:
+                    continue
+                current_timestamp = convert_utc_date_to_epoch(datapoints['timestamp'], date_format=self.date_format)
+                cluster_name = data['hostId'].split("-", 1)[0].strip()
+                metrics.append(f'''projectId={data['groupId']} hostId={data['hostId']} processId={data['processId']} metric={measurement['name']}  units={measurement['units']} cluster_name={cluster_name} {datapoints['value']} {current_timestamp}''')
+                last_time_epoch = max(current_timestamp, last_time_epoch)
         return metrics, {"last_time_epoch": last_time_epoch}
 
     def fetch(self):
@@ -236,15 +285,17 @@ class DiskMetricsAPI(BaseAPI):
         obj = self.kvstore.get(key)
         return obj
 
-
     def build_fetch_params(self):
         start_time_epoch = self.get_state()['last_time_epoch']+self.MOVING_WINDOW_DELTA
-        end_time_epoch = get_current_timestamp(milliseconds=True) - self.collection_config['END_TIME_EPOCH_OFFSET_SECONDS']
-        start_time_date = convert_epoch_to_utc_date(start_time_epoch, date_format=self.isoformat, milliseconds=True)
-        end_time_date = convert_epoch_to_utc_date(end_time_epoch, date_format=self.isoformat, milliseconds=True)
+        end_time_epoch = get_current_timestamp() - self.collection_config['END_TIME_EPOCH_OFFSET_SECONDS']
+        start_time_date = convert_epoch_to_utc_date(start_time_epoch, date_format=self.isoformat)
+        end_time_date = convert_epoch_to_utc_date(end_time_epoch, date_format=self.isoformat)
         return f'''{self.api_config['BASE_URL']}/groups/{self.api_config['PROJECT_ID']}/processes/{self.process_id}/disks/{self.disk_name}/measurements''', {
-            "params": {"itemsPerPage": self.api_config['PAGINATION_LIMIT'], "granularity": "PT1M", "start": start_time_date, "end": end_time_date},
-            "auth": self.digestauth
+            "auth": self.digestauth,
+            "params": {"itemsPerPage": self.api_config['PAGINATION_LIMIT'], "granularity": "PT1M",
+                       "start": start_time_date, "end": end_time_date
+                       # "m": self.api_config["METRIC_TYPES"]["DISK_METRICS"]
+            }
         }
 
     def build_send_params(self):
@@ -258,10 +309,13 @@ class DiskMetricsAPI(BaseAPI):
         metrics = []
         last_time_epoch = self.DEFAULT_START_TIME_EPOCH
         for measurement in data['measurements']:
-                for datapoints in measurement['dataPoints']:
-                    if datapoints['value'] is None:
-                        continue
-                    metrics.append(f'''projectId={data['groupId']} partitionName={data['partitionName']} hostId={data['hostId']} processId={data['processId']} metric={measurement['name']}  units={measurement['units']} {datapoints['value']} {convert_utc_date_to_epoch(datapoints['timestamp'], date_format=self.date_format)}''')
+            for datapoints in measurement['dataPoints']:
+                if datapoints['value'] is None:
+                    continue
+                current_timestamp = convert_utc_date_to_epoch(datapoints['timestamp'], date_format=self.date_format)
+                cluster_name = data['hostId'].split("-", 1)[0].strip()
+                metrics.append(f'''projectId={data['groupId']} partitionName={data['partitionName']} hostId={data['hostId']} processId={data['processId']} metric={measurement['name']}  units={measurement['units']} cluster_name={cluster_name} {datapoints['value']} {current_timestamp}''')
+                last_time_epoch = max(current_timestamp, last_time_epoch)
         return metrics, {"last_time_epoch": last_time_epoch}
 
     def fetch(self):
@@ -311,17 +365,18 @@ class DatabaseMetricsAPI(BaseAPI):
         obj = self.kvstore.get(key)
         return obj
 
-
     def build_fetch_params(self):
         start_time_epoch = self.get_state()['last_time_epoch']+self.MOVING_WINDOW_DELTA
-        end_time_epoch = get_current_timestamp(milliseconds=True) - self.collection_config['END_TIME_EPOCH_OFFSET_SECONDS']
-        start_time_date = convert_epoch_to_utc_date(start_time_epoch, date_format=self.isoformat, milliseconds=True)
-        end_time_date = convert_epoch_to_utc_date(end_time_epoch, date_format=self.isoformat, milliseconds=True)
+        end_time_epoch = get_current_timestamp() - self.collection_config['END_TIME_EPOCH_OFFSET_SECONDS']
+        start_time_date = convert_epoch_to_utc_date(start_time_epoch, date_format=self.isoformat)
+        end_time_date = convert_epoch_to_utc_date(end_time_epoch, date_format=self.isoformat)
         return f'''{self.api_config['BASE_URL']}/groups/{self.api_config['PROJECT_ID']}/processes/{self.process_id}/databases/{self.database_name}/measurements''', {
             "auth": self.digestauth,
-            "params": {"itemsPerPage": self.api_config['PAGINATION_LIMIT'], "granularity": "PT1M", "start": start_time_date, "end": end_time_date
-        }}
-
+            "params": {"itemsPerPage": self.api_config['PAGINATION_LIMIT'], "granularity": "PT1M",
+                       "start": start_time_date, "end": end_time_date
+                        # ,  "m": self.api_config["METRIC_TYPES"]["DATABASE_METRICS"]
+            }
+        }
 
     def build_send_params(self):
         return {
@@ -334,10 +389,13 @@ class DatabaseMetricsAPI(BaseAPI):
         metrics = []
         last_time_epoch = self.DEFAULT_START_TIME_EPOCH
         for measurement in data['measurements']:
-                for datapoints in measurement['dataPoints']:
-                    if datapoints['value'] is None:
-                        continue
-                    metrics.append(f'''projectId={data['groupId']} databaseName={data['databaseName']} hostId={data['hostId']} processId={data['processId']} metric={measurement['name']}  units={measurement['units']} {datapoints['value']} {convert_utc_date_to_epoch(datapoints['timestamp'], date_format=self.date_format)}''')
+            for datapoints in measurement['dataPoints']:
+                if datapoints['value'] is None:
+                    continue
+                current_timestamp = convert_utc_date_to_epoch(datapoints['timestamp'], date_format=self.date_format)
+                cluster_name = data['hostId'].split("-", 1)[0].strip()
+                metrics.append(f'''projectId={data['groupId']} databaseName={data['databaseName']} hostId={data['hostId']} processId={data['processId']} metric={measurement['name']}  units={measurement['units']} cluster_name={cluster_name} {datapoints['value']} {current_timestamp}''')
+                last_time_epoch = max(current_timestamp, last_time_epoch)
         return metrics, {"last_time_epoch": last_time_epoch}
 
     def fetch(self):
@@ -359,6 +417,7 @@ class DatabaseMetricsAPI(BaseAPI):
         finally:
             output_handler.close()
 
+
 class ProjectEventsAPI(BaseAPI):
 
     pathname = "projectevents.json"
@@ -366,16 +425,13 @@ class ProjectEventsAPI(BaseAPI):
     def __init__(self, kvstore, config):
         super(ProjectEventsAPI, self).__init__(kvstore, config)
 
-
     def _get_key(self):
         key = f'''{self.api_config['PROJECT_ID']}-projectevents'''
         return key
 
-
     def save_state(self, state):
         key = self._get_key()
         self.kvstore.set(key, state)
-
 
     def get_state(self):
         key = self._get_key()
@@ -384,20 +440,19 @@ class ProjectEventsAPI(BaseAPI):
         obj = self.kvstore.get(key)
         return obj
 
-
     def build_fetch_params(self):
         state = self.get_state()
         if state["page_num"] == 0:
             start_time_epoch = state['last_time_epoch'] + self.MOVING_WINDOW_DELTA
-            end_time_epoch = get_current_timestamp(milliseconds=True) - self.collection_config['END_TIME_EPOCH_OFFSET_SECONDS']
+            end_time_epoch = get_current_timestamp() - self.collection_config['END_TIME_EPOCH_OFFSET_SECONDS']
             page_num = 1
         else:
             start_time_epoch = state['start_time_epoch']
             end_time_epoch = state['end_time_epoch']
             page_num = state['pageNum']
 
-        start_time_date = convert_epoch_to_utc_date(start_time_epoch, date_format=self.isoformat, milliseconds=True)
-        end_time_date = convert_epoch_to_utc_date(end_time_epoch, date_format=self.isoformat, milliseconds=True)
+        start_time_date = convert_epoch_to_utc_date(start_time_epoch, date_format=self.isoformat)
+        end_time_date = convert_epoch_to_utc_date(end_time_epoch, date_format=self.isoformat)
         return f'''{self.api_config['BASE_URL']}/groups/{self.api_config['PROJECT_ID']}/events''', {
             "auth": self.digestauth,
             "params": {"itemsPerPage": self.api_config['PAGINATION_LIMIT'], "minDate": start_time_date , "maxDate": end_time_date, "pageNum": page_num}
@@ -417,6 +472,8 @@ class ProjectEventsAPI(BaseAPI):
         last_time_epoch = self.DEFAULT_START_TIME_EPOCH
         event_logs = []
         for obj in data['results']:
+            current_timestamp = convert_date_to_epoch(obj['created'])
+            last_time_epoch = max(current_timestamp, last_time_epoch)
             event_logs.append(obj)
 
         return event_logs, {"last_time_epoch": last_time_epoch}
@@ -430,7 +487,6 @@ class ProjectEventsAPI(BaseAPI):
         count = 0
         try:
             while next_request:
-
                 send_success = has_next_page = False
                 status, data = ClientMixin.make_request(url, method="get", session=sess, TIMEOUT=60, **kwargs)
                 fetch_success = status and "results" in data
@@ -510,15 +566,15 @@ class OrgEventsAPI(BaseAPI):
         state = self.get_state()
         if state["page_num"] == 0:
             start_time_epoch = state['last_time_epoch'] + self.MOVING_WINDOW_DELTA
-            end_time_epoch = get_current_timestamp(milliseconds=True) - self.collection_config['END_TIME_EPOCH_OFFSET_SECONDS']
+            end_time_epoch = get_current_timestamp() - self.collection_config['END_TIME_EPOCH_OFFSET_SECONDS']
             page_num = 1
         else:
             start_time_epoch = state['start_time_epoch']
             end_time_epoch = state['end_time_epoch']
             page_num = state['pageNum']
 
-        start_time_date = convert_epoch_to_utc_date(start_time_epoch, date_format=self.isoformat, milliseconds=True)
-        end_time_date = convert_epoch_to_utc_date(end_time_epoch, date_format=self.isoformat, milliseconds=True)
+        start_time_date = convert_epoch_to_utc_date(start_time_epoch, date_format=self.isoformat)
+        end_time_date = convert_epoch_to_utc_date(end_time_epoch, date_format=self.isoformat)
         return f'''{self.api_config['BASE_URL']}/orgs/{self.api_config['ORGANIZATION_ID']}/events''', {
             "auth": self.digestauth,
             "params": {"itemsPerPage": self.api_config['PAGINATION_LIMIT'], "minDate": start_time_date , "maxDate": end_time_date, "pageNum": page_num}
@@ -538,6 +594,8 @@ class OrgEventsAPI(BaseAPI):
         last_time_epoch = self.DEFAULT_START_TIME_EPOCH
         event_logs = []
         for obj in data['results']:
+            current_timestamp = convert_date_to_epoch(obj['created'])
+            last_time_epoch = max(current_timestamp, last_time_epoch)
             event_logs.append(obj)
 
         return event_logs, {"last_time_epoch": last_time_epoch}

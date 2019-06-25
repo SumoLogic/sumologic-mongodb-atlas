@@ -17,23 +17,23 @@ with io.open(join(here, 'README.md'), encoding='utf-8') as f:
 
 
 CONSOLE_SCRIPTS = [
-    'sumonetskopecollector=sumonetskopecollector.netskope:main'
+    'sumomongodbatlascollector=sumomongodbatlascollector.main:main'
 ]
 
 setup(
-    name="sumologic-netskope-collector",
+    name="sumologic-mongodbatlas-collector",
     version=__versionstr__,
     packages=find_packages(),
     install_requires=INSTALL_REQUIRES,
     # PyPI metadata
     author="SumoLogic",
     author_email="it@sumologic.com",
-    description="Sumo Logic collection solution for netskope",
+    description="Sumo Logic collection solution for mongodb atlas",
     license="PSF",
     long_description=long_description,
     long_description_content_type='text/markdown',
-    keywords="sumologic python rest api log management analytics logreduce netskope agent security siem collector forwarder",
-    url="https://github.com/SumoLogic/sumologic-netskope",
+    keywords="sumologic python rest api log management analytics logreduce mongodb atlas agent security siem collector forwarder",
+    url="https://github.com/SumoLogic/sumologic-mongodb-atlas",
     zip_safe=True,
     include_package_data=True,
     classifiers=[

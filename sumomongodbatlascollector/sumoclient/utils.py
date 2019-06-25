@@ -33,6 +33,9 @@ def convert_utc_date_to_epoch(datestr, date_format='%Y-%m-%dT%H:%M:%S.%fZ', mill
         timestamp = timestamp*1000
     return int(timestamp)
 
+def convert_date_to_epoch(datestr):
+    dateobj = dateutil.parser.parse(datestr)
+    return dateobj.timestamp()
 
 def get_body(data, jsondump=True):
     if isinstance(data, list):
