@@ -1,5 +1,5 @@
 requests==2.21.0
 PyYAML==5.1
-future-fstrings==0.4.5
+future-fstrings==1.2.0
 futures==3.1.1
 six==1.12.0

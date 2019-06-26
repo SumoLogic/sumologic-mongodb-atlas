@@ -21,7 +21,7 @@ CONSOLE_SCRIPTS = [
 ]
 
 setup(
-    name="sumologic-mongodbatlas-collector",
+    name="sumologic-mongodb-atlas",
     version=__versionstr__,
     packages=find_packages(),
     install_requires=INSTALL_REQUIRES,

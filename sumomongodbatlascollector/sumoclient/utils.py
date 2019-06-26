@@ -1,7 +1,7 @@
 # -*- coding: future_fstrings -*-
 import time
 import json
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timedelta
 import dateutil.parser
 from common.logger import get_logger
 
@@ -59,4 +59,5 @@ def get_datetime_from_isoformat(date_str):
 
 
 def get_current_datetime():
-    return datetime.now(tz=timezone.utc)
+    return datetime.utcnow()
+    # return datetime.now(tz=timezone.utc) in 3.2 only
