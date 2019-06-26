@@ -2,8 +2,15 @@
 import shelve
 import threading
 import os
+import sys
 import datetime
 import tempfile
+import time
+
+if __name__ == "__main__":
+    cur_dir = os.path.dirname(os.path.dirname(os.path.realpath(__file__)))
+    sys.path.insert(0, cur_dir)
+
 from common.logger import get_logger
 from omnistorage.factory import ProviderFactory
 from omnistorage.base import Provider, KeyValueStorage
@@ -28,6 +35,7 @@ class OnPremKVStorage(KeyValueStorage):
 
     # default flag mode is c which is different than w because it creates db if it doesn't exists
     '''
+    LOCK_DATE_KEY = "last_locked_date"
 
     def setup(self, name, force_create=False, *args, **kwargs):
         self.key_locks = {}
@@ -116,6 +124,7 @@ class OnPremKVStorage(KeyValueStorage):
                     os.unlink(lockfile)
                 self.key_locks[lockkey] = os.open(lockfile, os.O_CREAT | os.O_EXCL | os.O_RDWR | os.O_NONBLOCK) # is this non blocking?
                 self.logger.debug("acquired_lock lockfile: %s" % lockfile)
+                self.set(lockkey, {self.LOCK_DATE_KEY: time.time()})
                 return True
             except OSError:
                 _, e, tb = sys.exc_info()
@@ -150,6 +159,7 @@ class OnPremKVStorage(KeyValueStorage):
                 if os.path.isfile(lockfile):
                     os.unlink(lockfile)
                 del self.key_locks[lockkey]
+                self.delete(lockkey)
                 self.logger.debug("released_lock lockfile: %s" % lockfile)
                 return True
             except Exception as e:
@@ -158,6 +168,16 @@ class OnPremKVStorage(KeyValueStorage):
         else:
             self.logger.warning("lock not found lockfile: %s" % lockfile)
             return False
+
+    def release_lock_on_expired_key(self, key, expiry_min=5):
+        lock_key = self._get_lock_key(key)
+        data = self.get(lock_key)
+        if data and self.LOCK_DATE_KEY in data:
+            now = time.time()
+            past = data[self.LOCK_DATE_COL]
+            if (now - past) > expiry_min * 60:
+                self.logger.info(f'''Lock time expired key: {key} passed time: {(now-past)/60} min''')
+                self.release_lock(key)
 
 
 class OnPremProvider(Provider):

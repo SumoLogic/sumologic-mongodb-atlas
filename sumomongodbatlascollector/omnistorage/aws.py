@@ -1,13 +1,23 @@
 # -*- coding: future_fstrings -*-
-from base import Provider, KeyValueStorage
-import boto3
-from datetime import datetime, timezone
-from factory import ProviderFactory
-from common.logger import get_logger
-import json
+import copy
 import os
+import sys
+import time
+
+if __name__ == "__main__":
+    cur_dir = os.path.dirname(os.path.dirname(os.path.realpath(__file__)))
+    sys.path.insert(0, cur_dir)
+
+
 import decimal
+import json
+import boto3
+from datetime import datetime
+import dateutil.parser
 from botocore.exceptions import ClientError
+from common.logger import get_logger
+from omnistorage.base import Provider, KeyValueStorage
+from omnistorage.factory import ProviderFactory
 
 
 class DecimalEncoder(json.JSONEncoder):
@@ -20,8 +30,37 @@ class DecimalEncoder(json.JSONEncoder):
         return super(DecimalEncoder, self).default(o)
 
 
+if sys.version_info > (3, 2):
+    from datetime import timezone
+    utc = timezone.utc
+else:
+    from datetime import tzinfo, timedelta
+    ZERO = timedelta(0)
+
+    class UTC(tzinfo):
+
+        def utcoffset(self, dt):
+            return ZERO
+
+        def tzname(self, dt):
+            return "UTC"
+
+        def dst(self, dt):
+            return ZERO
+
+    utc = UTC()
+
+def convert_date_to_epoch(datestr):
+    dateobj = dateutil.parser.parse(datestr)
+    if sys.version_info > (3, 3):
+        return dateobj.timestamp()
+    else:
+        return (dateobj - datetime(1970, 1, 1, tzinfo=utc)).total_seconds()
+
+
 def get_current_datetime():
-    return datetime.now(tz=timezone.utc)
+    return datetime.now(tz=utc)
+
 
 
 class AWSKVStorage(KeyValueStorage):
@@ -61,6 +100,23 @@ class AWSKVStorage(KeyValueStorage):
         else:
             return obj
 
+    def _put_decimals(self, obj):
+        if isinstance(obj, list):
+            for i in range(len(obj)):
+                obj[i] = self._put_decimals(obj[i])
+            return obj
+        elif isinstance(obj, dict):
+            for k, v in obj.items():
+                obj[k] = self._put_decimals(v)
+            return obj
+        elif isinstance(obj, set):
+            return set(self._put_decimals(i) for i in obj)
+        elif isinstance(obj, float):
+            return decimal.Decimal(obj)
+        else:
+            return obj
+
+
     def get(self, key):
         table = self.dynamodbcli.Table(self.table_name)
         response = table.get_item(Key={self.KEY_COL: key},
@@ -72,10 +128,25 @@ class AWSKVStorage(KeyValueStorage):
         self.logger.info(f'''Fetched Item {key} from {self.table_name} table''')
         return self._replace_decimals(value)
 
+    def _get_item(self, key):
+        table = self.dynamodbcli.Table(self.table_name)
+        response = table.get_item(Key={self.KEY_COL: key},
+                                  ConsistentRead=True,
+                                  ReturnConsumedCapacity='TOTAL')
+        if response.get('ResponseMetadata')['HTTPStatusCode'] != 200:
+            raise Exception(f'''Error in get_item api: {response}''')
+        item = response.get("Item", {})
+        if item:
+            item[self.VALUE_COL]=self._replace_decimals(item[self.VALUE_COL])
+        self.logger.info(f'''Fetched Item {key} from {self.table_name} table''')
+        return item
+
     def set(self, key, value):
+        cpvalue = copy.deepcopy(value)
+        cpvalue = self._put_decimals(cpvalue)
         table = self.dynamodbcli.Table(self.table_name)
         response = table.put_item(Item={self.KEY_COL: key,
-                                        self.VALUE_COL: value
+                                        self.VALUE_COL: cpvalue
                                         },
                                   ReturnConsumedCapacity='TOTAL')
         if response.get('ResponseMetadata')['HTTPStatusCode'] != 200:
@@ -84,7 +155,7 @@ class AWSKVStorage(KeyValueStorage):
 
     def has_key(self, key):
         # Todo catch item not found in get/delete
-        is_present = True if self.get(key) else False
+        is_present = False if self.get(key) is None else True
         return is_present
 
     def delete(self, key):
@@ -152,9 +223,20 @@ class AWSKVStorage(KeyValueStorage):
             self.logger.info(f'''Lock acquired key: {key} Message: {response["Attributes"]}''')
             return True
 
+    def release_lock_on_expired_key(self, key, expiry_min=5):
+        lock_key = self._get_lock_key(key)
+        import ipdb;ipdb.set_trace()
+        data = self._get_item(lock_key)
+        if data and self.LOCK_DATE_COL in data:
+            now = time.time()
+            past = convert_date_to_epoch(data[self.LOCK_DATE_COL])
+            if (now - past) > expiry_min*60:
+                self.logger.info(f'''Lock time expired key: {key} passed time: {(now-past)/60} min''')
+                self.release_lock(key)
+
     def release_lock(self, key):
 
-        lock_key = "lockon_%s" % key
+        lock_key = self._get_lock_key(key)
         table = self.dynamodbcli.Table(self.table_name)
         try:
             response = table.update_item(

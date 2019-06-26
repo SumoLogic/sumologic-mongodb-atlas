@@ -7,14 +7,15 @@ ROOT_DIR = os.path.dirname(os.path.dirname(os.path.realpath(__file__)))
 TARGET_FOLDER = os.path.join(ROOT_DIR, "deploymanager", "target")
 RESOURCE_FOLDER = os.path.join(ROOT_DIR, "deploymanager", "resources")
 
-config = {
-    "APPNAME": "MongoDB Atlas",
-    "PACKAGENAME": "sumologic-mongodb-atlas"
-}
-config["APPNAME_SINGLE"]= config['APPNAME'].replace(" ", '')
-config["APPNAME_SMALL"]= config['APPNAME_SINGLE'].lower()
-config["SRC_FOLDER_NAME"]= f'''sumo{config['APPNAME_SMALL']}collector'''
-
+def get_config():
+    config = {
+        "APPNAME": "MongoDB Atlas",
+        "PACKAGENAME": "sumologic-mongodb-atlas"
+    }
+    config["APPNAME_SINGLE"] = config['APPNAME'].replace(" ", '')
+    config["APPNAME_SMALL"] = config['APPNAME_SINGLE'].lower()
+    config["SRC_FOLDER_NAME"] = f'''sumo{config['APPNAME_SMALL']}collector'''
+    return config
 
 def generate_file(filepath, params, target_dir):
     with open(filepath) as filein:
@@ -29,7 +30,7 @@ def create_target_dir():
         os.mkdir(TARGET_FOLDER)
 
 
-def remove_unwanted_files():
+def remove_unwanted_files(config):
     print("removing build directories")
 
     eggfile = f'''{config['PACKAGENAME'].replace("-", "_")}.egg-info'''
@@ -50,7 +51,8 @@ def remove_unwanted_files():
 
     print("removing zip/db files")
     dbfile = os.path.join(ROOT_DIR, config['SRC_FOLDER_NAME'], "omnistorage", config['APPNAME_SMALL'])
-    zipfile = os.path.join(ROOT_DIR,f"{config['SRC_FOLDER_NAME']}.zip")
+    shutil.rmtree(TARGET_FOLDER)
+    zipfile = os.path.join(ROOT_DIR,f"{config['APPNAME_SINGLE']}.zip")
 
     for filepath in [dbfile, zipfile]:
         if os.path.isfile(filepath):

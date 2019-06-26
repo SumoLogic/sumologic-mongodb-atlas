@@ -211,6 +211,8 @@ class MongoDBAtlasCollector(object):
                         self.log.info(f"API Type: {api_type} thread completed {obj}")
             finally:
                 self.stop_running()
+        else:
+            self.kvstore.release_lock_on_expired_key('is_running')
 
     def test(self):
         if self.is_running():

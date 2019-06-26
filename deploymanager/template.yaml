@@ -41,6 +41,7 @@ Resources:
             Ref: PrivateAPIKey
           PUBLIC_KEY:
             Ref: PublicAPIKey
+          ENVIRONMENT: "aws"
       Events:
         ScheduleRule:
           Properties:

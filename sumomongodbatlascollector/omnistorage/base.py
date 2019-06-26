@@ -70,3 +70,6 @@ class KeyValueStorage():
 
     def _get_lock_key(self, key):
         return "lockon_%s" % key
+
+    def release_lock_on_expired_key(self, key):
+        pass

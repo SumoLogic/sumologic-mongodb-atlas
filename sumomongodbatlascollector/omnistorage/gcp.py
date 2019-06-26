@@ -1,4 +1,10 @@
+import os, sys
 from google.cloud import datastore
+
+if __name__ == "__main__":
+    cur_dir = os.path.dirname(os.path.dirname(os.path.realpath(__file__)))
+    sys.path.insert(0, cur_dir)
+
 from omnistorage.base import KeyValueStorage, Provider
 from omnistorage.factory import ProviderFactory
 from common.logger import get_logger
@@ -36,7 +42,7 @@ class GCPKVStorage(KeyValueStorage):
         self.logger.info(f'''Saved Item with key {row.key.name} table {row.key.path}''')
 
     def has_key(self, key):
-        is_present = True if self.get(key, raise_exc=False) else False
+        is_present = False if self.get(key, raise_exc=False) is None else True
         return is_present
 
     def delete(self, key):

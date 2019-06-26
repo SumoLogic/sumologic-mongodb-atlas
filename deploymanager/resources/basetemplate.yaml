@@ -19,7 +19,7 @@ Resources:
       CodeUri: s3://appdevstore/$APPNAME_SINGLE.zip
       Environment:
         Variables:
-
+          ENVIRONMENT: "aws"
       Events:
         ScheduleRule:
           Properties:
