@@ -1,10 +1,30 @@
 # -*- coding: future_fstrings -*-
 import time
+import sys
 import json
 from datetime import datetime, timedelta
 import dateutil.parser
 from common.logger import get_logger
 
+if sys.version_info > (3, 2):
+    from datetime import timezone
+    utc = timezone.utc
+else:
+    from datetime import tzinfo
+    ZERO = timedelta(0)
+
+    class UTC(tzinfo):
+
+        def utcoffset(self, dt):
+            return ZERO
+
+        def tzname(self, dt):
+            return "UTC"
+
+        def dst(self, dt):
+            return ZERO
+
+    utc = UTC()
 
 def get_current_timestamp(milliseconds=False):
     # The time.time() function returns the number of seconds since the epoch, as seconds. Note that the "epoch" is defined as the start of January 1st, 1970 in UTC.
@@ -33,9 +53,14 @@ def convert_utc_date_to_epoch(datestr, date_format='%Y-%m-%dT%H:%M:%S.%fZ', mill
         timestamp = timestamp*1000
     return int(timestamp)
 
+
 def convert_date_to_epoch(datestr):
     dateobj = dateutil.parser.parse(datestr)
-    return dateobj.timestamp()
+    if sys.version_info > (3.3):
+        return dateobj.timestamp()
+    else:
+        return (dateobj - datetime(1970, 1, 1, tzinfo=utc)).total_seconds()
+
 
 def get_body(data, jsondump=True):
     if isinstance(data, list):
@@ -59,5 +84,5 @@ def get_datetime_from_isoformat(date_str):
 
 
 def get_current_datetime():
-    return datetime.utcnow()
-    # return datetime.now(tz=timezone.utc) in 3.2 only
+    return datetime.now(tz=utc)
+
