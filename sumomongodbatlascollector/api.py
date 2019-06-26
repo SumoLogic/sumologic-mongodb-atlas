@@ -690,7 +690,7 @@ class AlertsAPI(BaseAPI):
         if state["page_num"] == 0:
             page_num = 1
         else:
-            page_num = state['pageNum']
+            page_num = state['page_num']
 
         return f'''{self.api_config['BASE_URL']}/groups/{self.api_config['PROJECT_ID']}/alerts''', {
             "auth": self.digestauth,

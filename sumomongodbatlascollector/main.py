@@ -58,14 +58,14 @@ class MongoDBAtlasCollector(object):
     def _get_all_databases(self, process_ids):
         database_names = []
         for process_id in process_ids:
-            url = f'''{self.api_config['BASE_URL']}/groups/{self.api_config['PROJECT_ID']}/processes/{process_id}/databases'''
+            url = f"{self.api_config['BASE_URL']}/groups/{self.api_config['PROJECT_ID']}/processes/{process_id}/databases"
             kwargs = {'auth': self.digestauth, "params": {"itemsPerPage": self.api_config['PAGINATION_LIMIT']}}
             all_data = self.getpaginateddata(url, **kwargs)
             database_names.extend([obj['databaseName'] for data in all_data for obj in data['results']])
         return list(set(database_names))
 
     def _get_all_processes_from_project(self):
-        url = f'''{self.api_config['BASE_URL']}/groups/{self.api_config['PROJECT_ID']}/processes'''
+        url = f"{self.api_config['BASE_URL']}/groups/{self.api_config['PROJECT_ID']}/processes"
         kwargs = {'auth': self.digestauth, "params": {"itemsPerPage": self.api_config['PAGINATION_LIMIT']}}
         all_data = self.getpaginateddata(url, **kwargs)
         process_ids = [obj['id'] for data in all_data for obj in data['results']]
@@ -78,7 +78,7 @@ class MongoDBAtlasCollector(object):
     def _get_all_disks_from_host(self, process_ids):
         disks = []
         for process_id in process_ids:
-            url = f'''{self.api_config['BASE_URL']}/groups/{self.api_config['PROJECT_ID']}/processes/{process_id}/disks'''
+            url = f"{self.api_config['BASE_URL']}/groups/{self.api_config['PROJECT_ID']}/processes/{process_id}/disks"
             kwargs = {'auth': self.digestauth, "params": {"itemsPerPage": self.api_config['PAGINATION_LIMIT']}}
             all_data = self.getpaginateddata(url, **kwargs)
             disks.extend([obj['partitionName'] for data in all_data for obj in data['results']])
@@ -206,9 +206,9 @@ class MongoDBAtlasCollector(object):
                         future.result()
                         obj = self.kvstore.get(api_type)
                     except Exception as exc:
-                        self.log.error(f'''API Type: {api_type} thread generated an exception: {exc}''', exc_info=True)
+                        self.log.error(f"API Type: {api_type} thread generated an exception: {exc}", exc_info=True)
                     else:
-                        self.log.info(f'''API Type: {api_type} thread completed {obj}''')
+                        self.log.info(f"API Type: {api_type} thread completed {obj}")
             finally:
                 self.stop_running()
 
@@ -224,7 +224,7 @@ class MongoDBAtlasCollector(object):
                 self.stop_running()
 
 
-def main(context=None):
+def main(*args, **kwargs):
 
     try:
         ns = MongoDBAtlasCollector()

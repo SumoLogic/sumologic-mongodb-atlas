@@ -11,17 +11,17 @@ Outputs:
       - MongoDBAtlasSchedulerFunction
       - Arn
 Parameters:
-  LOGS_SUMO_ENDPOINT:
+  HTTPLogsEndpoint:
     Type: String
-  METRICS_SUMO_ENDPOINT:
+  HTTPMetricsEndpoint:
     Type: String
-  ORGANIZATION_ID:
+  OrganizationID:
     Type: String
-  PROJECT_ID:
+  ProjectID:
     Type: String
-  PRIVATE_KEY:
+  PrivateAPIKey:
     Type: String
-  PUBLIC_KEY:
+  PublicAPIKey:
     Type: String
 Resources:
   MongoDBAtlasSchedulerFunction:
@@ -29,14 +29,20 @@ Resources:
       CodeUri: s3://appdevstore/MongoDBAtlas.zip
       Environment:
         Variables:
-          LOGS_SUMO_ENDPOINT: Ref LOGS_SUMO_ENDPOINT
-          METRICS_SUMO_ENDPOINT: Ref METRICS_SUMO_ENDPOINT
-          ORGANIZATION_ID: Ref ORGANIZATION_ID
-          PROJECT_ID: Ref PROJECT_ID
-          PRIVATE_KEY: Ref PRIVATE_KEY
-          PUBLIC_KEY: Ref PUBLIC_KEY
+          LOGS_SUMO_ENDPOINT:
+            Ref: HTTPLogsEndpoint
+          METRICS_SUMO_ENDPOINT:
+            Ref: HTTPMetricsEndpoint
+          ORGANIZATION_ID:
+            Ref: OrganizationID
+          PROJECT_ID:
+            Ref: ProjectID
+          PRIVATE_KEY:
+            Ref: PrivateAPIKey
+          PUBLIC_KEY:
+            Ref: PublicAPIKey
       Events:
-        MongoDBAtlasScheduleRule:
+        ScheduleRule:
           Properties:
             Schedule: rate(5 minutes)
           Type: Schedule

@@ -102,6 +102,7 @@ class OnPremKVStorage(KeyValueStorage):
             raise Exception(f'''Error in removing {e.filename}:  {e.strerror}''')
 
     def acquire_lock(self, key):
+        # In onprem the number of lock keys should fit in memory ie self.key_locks
         # In onprem these are actually process level locks so another process won't be able to access the key. This is because thread level locking is implemented via self.Lock
         # Todo move to context manager and have exclusive and shared lock option
         lockkey = self._get_lock_key(key)

@@ -56,7 +56,7 @@ def convert_utc_date_to_epoch(datestr, date_format='%Y-%m-%dT%H:%M:%S.%fZ', mill
 
 def convert_date_to_epoch(datestr):
     dateobj = dateutil.parser.parse(datestr)
-    if sys.version_info > (3.3):
+    if sys.version_info > (3, 3):
         return dateobj.timestamp()
     else:
         return (dateobj - datetime(1970, 1, 1, tzinfo=utc)).total_seconds()
