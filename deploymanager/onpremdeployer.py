@@ -31,6 +31,7 @@ def deploy_package_test_repo():
     os.chdir(ROOT_DIR)
     print("changing to root dir: ", os.getcwd())
     subprocess.run(["python", "-m", "twine", "upload", "dist/*", "--repository", "testpypi"])
+    print("install using command: pip install --extra-index-url https://testpypi.python.org/pypi %s --no-cache-dir" % config['PACKAGENAME'])
 
 def build_and_deploy(config):
     remove_unwanted_files(config)
@@ -38,8 +39,8 @@ def build_and_deploy(config):
     # generate_setup_files(config)
     print("current python env:", subprocess.run(["pyenv", "version"]))
     build_package()
-    deploy_package_test_repo()
-
+    # deploy_package_test_repo()
+    deploy_package()
 
 if __name__ == "__main__":
     config = get_config()

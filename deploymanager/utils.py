@@ -51,7 +51,8 @@ def remove_unwanted_files(config):
 
     print("removing zip/db files")
     dbfile = os.path.join(ROOT_DIR, config['SRC_FOLDER_NAME'], "omnistorage", config['APPNAME_SMALL'])
-    shutil.rmtree(TARGET_FOLDER)
+    if os.path.isdir(TARGET_FOLDER):
+        shutil.rmtree(TARGET_FOLDER)
     zipfile = os.path.join(ROOT_DIR,f"{config['APPNAME_SINGLE']}.zip")
 
     for filepath in [dbfile, zipfile]:

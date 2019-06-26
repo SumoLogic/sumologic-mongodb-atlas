@@ -24,7 +24,7 @@ Parameters:
   PublicAPIKey:
     Type: String
 Resources:
-  MongoDBAtlasSchedulerFunction:
+  MongoDBAtlasFunction:
     Properties:
       CodeUri: s3://appdevstore/MongoDBAtlas.zip
       Environment:

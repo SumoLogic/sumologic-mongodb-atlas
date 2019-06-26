@@ -140,6 +140,7 @@ class OnPremKVStorage(KeyValueStorage):
             try:
                 fcntl.lockf(self.key_locks[lockkey], fcntl.LOCK_EX | fcntl.LOCK_NB) # non blocking
                 self.logger.debug("acquired_lock lockfile: %s" % lockfile)
+                self.set(lockkey, {self.LOCK_DATE_KEY: time.time()})
                 return True
             except IOError:
                 self.logger.warning("Another instance is already running, quitting.")
@@ -178,6 +179,9 @@ class OnPremKVStorage(KeyValueStorage):
             if (now - past) > expiry_min * 60:
                 self.logger.info(f'''Lock time expired key: {key} passed time: {(now-past)/60} min''')
                 self.release_lock(key)
+        else:
+            lockfile = os.path.normpath(tempfile.gettempdir() + '/' + lock_key)
+            self.logger.info("remove lock forcefully by removing %s" % lockfile)
 
 
 class OnPremProvider(Provider):

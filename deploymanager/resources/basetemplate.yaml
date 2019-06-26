@@ -4,7 +4,7 @@ Description: 'This solution consists of a lambda functions which is used to fetc
 
   '
 Outputs:
-  MongoDBAtlasSchedulerFunction:
+  $APPNAME_SINGLEFunction:
     Description: $APPNAME_SINGLEScheduler Function ARN
     Value:
       Fn::GetAtt:
@@ -14,7 +14,7 @@ Parameters:
 
 Resources:
 
-  MongoDBAtlasSchedulerFunction:
+  $APPNAME_SINGLEFunction:
     Properties:
       CodeUri: s3://appdevstore/$APPNAME_SINGLE.zip
       Environment:
