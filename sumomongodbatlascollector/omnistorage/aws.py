@@ -112,10 +112,10 @@ class AWSKVStorage(KeyValueStorage):
         elif isinstance(obj, set):
             return set(self._put_decimals(i) for i in obj)
         elif isinstance(obj, float):
-            return decimal.Decimal(obj)
+            # refer https://github.com/boto/boto3/issues/665
+            return decimal.Decimal(str(obj))
         else:
             return obj
-
 
     def get(self, key):
         table = self.dynamodbcli.Table(self.table_name)
@@ -225,7 +225,6 @@ class AWSKVStorage(KeyValueStorage):
 
     def release_lock_on_expired_key(self, key, expiry_min=5):
         lock_key = self._get_lock_key(key)
-        import ipdb;ipdb.set_trace()
         data = self._get_item(lock_key)
         if data and self.LOCK_DATE_COL in data:
             now = time.time()
@@ -345,9 +344,11 @@ class AWSProvider(Provider):  # should we disallow direct access to these classe
 
 
 if __name__ == "__main__":
-
     key = "abc"
-    value = {"name": "Himanshu"}
+    key2 = 101
+    # keys in value should of same type 1 cannot be a key in below example
+    # similarly key or primary key should be same
+    value = {"name": "Himanshu", '1': 23423, "fv": 12.344}
     cli = ProviderFactory.get_provider("aws", region_name="us-east-1")
     kvstore = cli.get_storage("keyvalue", name='kvstore', force_create=True)
     kvstore.set(key, value)
@@ -355,10 +356,17 @@ if __name__ == "__main__":
     assert(kvstore.has_key(key) == True)
     kvstore.delete(key)
     assert(kvstore.has_key(key) == False)
-    assert(kvstore.acquire_lock(key) == True)
-    assert(kvstore.acquire_lock(key) == False)
-    assert(kvstore.acquire_lock("blah") == True)
-    assert(kvstore.release_lock(key) == True)
-    assert(kvstore.release_lock(key) == False)
-    assert(kvstore.release_lock("blahblah") == False)
+    # assert(kvstore.acquire_lock(key) == True)
+    # assert(kvstore.acquire_lock(key) == False)
+    # assert(kvstore.acquire_lock("blah") == True)
+    # assert(kvstore.release_lock(key) == True)
+    # assert(kvstore.release_lock(key) == False)
+    # assert(kvstore.release_lock("blahblah") == False)
+    kvstore.destroy()
+    kvstore = cli.get_storage("keyvalue", name='kvstore', key_type='N', force_create=True)
+    kvstore.set(key2, value)
+    assert(kvstore.get(key2) == value)
+    assert(kvstore.has_key(key2) == True)
+    kvstore.delete(key2)
+    assert(kvstore.has_key(key2) == False)
     kvstore.destroy()

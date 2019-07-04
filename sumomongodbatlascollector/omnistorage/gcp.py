@@ -63,6 +63,9 @@ class GCPKVStorage(KeyValueStorage):
     def release_lock(self, key):
         pass
 
+    def release_lock_on_expired_key(self, key):
+        pass
+
 
 class GCPProvider(Provider):
 
@@ -76,12 +79,25 @@ class GCPProvider(Provider):
 
 if __name__ == "__main__":
     key = "abc"
-    value = {"name": "Himanshu"}
-    gcp_cli = ProviderFactory.get_provider("gcp")
-    gcp_kvstore = gcp_cli.get_storage("keyvalue", name='kvstore', force_create=True)
-    gcp_kvstore.set(key, value)
-    print(gcp_kvstore.get(key) == value)
-    print(gcp_kvstore.has_key(key) == True)
-    gcp_kvstore.delete(key)
-    print(gcp_kvstore.has_key(key) == False)
+    key2 = 101
+    value = {"name": "Himanshu", '1': 23423, "fv": 12.34400}
+    cli = ProviderFactory.get_provider("gcp")
+    kvstore = cli.get_storage("keyvalue", name='kvstore', force_create=True)
 
+    kvstore.set(key, value)
+    assert(kvstore.get(key) == value)
+    assert(kvstore.has_key(key) == True)
+    kvstore.delete(key)
+    assert(kvstore.has_key(key) == False)
+    # assert(kvstore.acquire_lock(key) == True)
+    # assert(kvstore.acquire_lock(key) == False)
+    # assert(kvstore.acquire_lock("blah") == True)
+    # assert(kvstore.release_lock(key) == True)
+    # assert(kvstore.release_lock(key) == False)
+    # assert(kvstore.release_lock("blahblah") == False)
+    kvstore.set(key2, value)
+    assert(kvstore.get(key2) == value)
+    assert(kvstore.has_key(key2) == True)
+    kvstore.delete(key2)
+    assert(kvstore.has_key(key2) == False)
+    kvstore.destroy()

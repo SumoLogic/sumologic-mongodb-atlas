@@ -130,6 +130,9 @@ class LogAPI(BaseAPI):
         last_time_epoch = self.DEFAULT_START_TIME_EPOCH
         results = gzip.GzipFile(fileobj=BytesIO(content))
         for line in results.readlines():
+            if not line.strip():
+                # for JSONDecoderror in case of empty lines
+                continue
             if "audit" in self.filename:
                 msg = json.loads(line.decode('utf-8'))
                 msg['project_id'] = self.api_config['PROJECT_ID']
