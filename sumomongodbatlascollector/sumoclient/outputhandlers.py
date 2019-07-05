@@ -2,6 +2,7 @@
 import sys
 import math
 import zlib
+from collections import Iterable
 from sumoclient.base import BaseOutputHandler
 from sumoclient.httputils import SessionPool, ClientMixin
 from sumoclient.utils import get_body
@@ -27,9 +28,7 @@ class HTTPHandler(BaseOutputHandler):
         if extra_headers:
             headers.update(extra_headers)
 
-        num_batches, chunk_size = self.get_chunk_size(data, self.collection_config.get("MAX_PAYLOAD_BYTESIZE", 500000))
-        self.log.info(f'''Chunking data total_len: {len(data)} batch_len: {chunk_size} num_batches: {num_batches}''')
-        for idx, batch in enumerate(self.chunking(data, chunk_size), start=1):
+        for idx, batch in enumerate(self.bytesize_chunking(data, self.collection_config.get("MAX_PAYLOAD_BYTESIZE", 500000), jsondump), start=1):
             body = get_body(batch, jsondump)
             self.log.info(f'''Sending batch {idx} len: {len(body)}''')
             if self.collection_config.get("COMPRESSED", True):
@@ -48,7 +47,31 @@ class HTTPHandler(BaseOutputHandler):
         self.sumoconn.close()
 
     @classmethod
-    def chunking(cls, iterable, size=1):
+    def bytesize_chunking(cls, iterable, max_byte_size, jsondump=False):
+        if not isinstance(iterable, Iterable):
+            iterable = [iterable]
+        num_batches = 0
+        total_byte_size = 0
+        payload = []
+        cur_size = 0
+        for item in iterable:
+            item_size = utf8len(get_body(item, jsondump))
+            if cur_size + item_size > max_byte_size:
+                num_batches += 1
+                yield payload
+                payload = [item]
+                cur_size = item_size
+            else:
+                payload.append(item)
+                cur_size += item_size
+            total_byte_size += item_size
+        if payload:
+            num_batches += 1
+            yield payload
+        self.log.info(f'''Chunking data total_size: {total_byte_size} num_batches: {num_batches}''')
+
+    @classmethod
+    def batchsize_chunking(cls, iterable, size=1):
         l = len(iterable)
         for idx in range(0, l, size):
             data = iterable[idx:min(idx + size, l)]
