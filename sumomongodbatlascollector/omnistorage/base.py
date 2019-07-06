@@ -1,8 +1,9 @@
+from common.logger import get_logger
 from abc import ABCMeta, abstractmethod
 import six
 
 @six.add_metaclass(ABCMeta)
-class Provider():
+class Provider(object):
 
     def __init__(self, *args, **kwargs):
         self.setup(*args, **kwargs)
@@ -28,10 +29,11 @@ class Provider():
         pass
 
 @six.add_metaclass(ABCMeta)
-class KeyValueStorage():
+class KeyValueStorage(object):
     #Todo support atomic + updates + batch get/set
 
     def __init__(self, *args, **kwargs):
+        self.logger = get_logger(__name__) if not kwargs.get('logger') else kwargs['logger']
         self.setup(*args, **kwargs)
 
     @abstractmethod

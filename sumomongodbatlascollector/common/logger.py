@@ -14,7 +14,7 @@ ENABLE_LOGFILE = True
 
 def get_logger(name, LOG_FORMAT=LOG_FORMAT, LOG_FILEPATH=LOG_FILEPATH, ROTATION_TYPE=ROTATION_TYPE,
                ROTATION_INTERVAL=ROTATION_INTERVAL, ENABLE_LOGFILE=ENABLE_LOGFILE,
-               ENABLE_CONSOLE_LOG=ENABLE_CONSOLE_LOG, force_create=False):
+               ENABLE_CONSOLE_LOG=ENABLE_CONSOLE_LOG, LOG_LEVEL="DEBUG", force_create=False):
     name = name or __name__
     log = logging.getLogger(name)
     if (not log.handlers) or force_create:
@@ -22,8 +22,8 @@ def get_logger(name, LOG_FORMAT=LOG_FORMAT, LOG_FILEPATH=LOG_FILEPATH, ROTATION_
             # removing existing handlers
             for hdlr in log.handlers:
                 log.removeHandler(hdlr)
-
-        log.setLevel(logging.DEBUG)
+        log_level = logging.getLevelName(LOG_LEVEL)
+        log.setLevel(log_level)
         logFormatter = logging.Formatter(LOG_FORMAT)
 
         if ENABLE_CONSOLE_LOG:

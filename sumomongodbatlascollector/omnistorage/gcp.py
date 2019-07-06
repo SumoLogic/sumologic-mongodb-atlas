@@ -7,21 +7,17 @@ if __name__ == "__main__":
 
 from omnistorage.base import KeyValueStorage, Provider
 from omnistorage.factory import ProviderFactory
-from common.logger import get_logger
 from omnistorage.errors import ItemNotFound
 
 
 class GCPKVStorage(KeyValueStorage):
     VALUE_COL = "value"
 
-
     def setup(self, name, force_create=False, *args, **kwargs):
         self.table_name = name
         self.datastore_cli = datastore.Client() # don't need a project id if creds path is exported
-        self.logger = get_logger(__name__)
         if force_create:
             self.destroy()
-
 
     def get(self, key, raise_exc=False):
         entity_key = self.datastore_cli.key(self.table_name, key)

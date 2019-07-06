@@ -74,7 +74,6 @@ class AWSKVStorage(KeyValueStorage):
         self.region_name = region_name
         self.dynamodbcli = boto3.resource('dynamodb', region_name=self.region_name)
         self.table_name = name
-        self.logger = get_logger(__name__)
         self.key_type = key_type
         if force_create:
             self.destroy()

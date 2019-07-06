@@ -46,8 +46,7 @@ class HTTPHandler(BaseOutputHandler):
     def close(self):
         self.sumoconn.close()
 
-    @classmethod
-    def bytesize_chunking(cls, iterable, max_byte_size, jsondump=False):
+    def bytesize_chunking(self, iterable, max_byte_size, jsondump=False):
         if not isinstance(iterable, Iterable):
             iterable = [iterable]
         num_batches = 0
@@ -55,7 +54,7 @@ class HTTPHandler(BaseOutputHandler):
         payload = []
         cur_size = 0
         for item in iterable:
-            item_size = utf8len(get_body(item, jsondump))
+            item_size = self.utf8len(get_body(item, jsondump))
             if cur_size + item_size > max_byte_size:
                 num_batches += 1
                 yield payload

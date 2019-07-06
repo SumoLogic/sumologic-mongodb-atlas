@@ -2,8 +2,8 @@
 import os
 import hashlib
 import sys
+import time
 import bson
-from time import sleep
 
 if __name__ == "__main__":
     cur_dir = os.path.dirname(os.path.dirname(os.path.realpath(__file__)))
@@ -15,14 +15,11 @@ from azure.cosmosdb.table import (
     EntityProperty,
     EdmType,
 )
+from azure.common import AzureMissingResourceHttpError
 from azure.cosmosdb.table.models import Entity
 from omnistorage.base import Provider, KeyValueStorage
 from omnistorage.factory import ProviderFactory
 from common.logger import get_logger
-from azure.common import (
-    AzureHttpError, AzureMissingResourceHttpError
-)
-
 
 class AzureKVStorage(KeyValueStorage):
     KEY_COL = "RowKey"
@@ -40,7 +37,7 @@ class AzureKVStorage(KeyValueStorage):
         self.table_name = name
         if force_create:
             self.destroy()
-        if not self.table_exists(self.table_name):
+        if not self.table_exists():
             self._create_table()
 
     def get(self, key):
@@ -91,6 +88,22 @@ class AzureKVStorage(KeyValueStorage):
         is_present = True if self.get(key) else False
         return is_present
 
+    def _wait_till_exists(self, timeout=10):
+        start = time.time()
+        while True:
+            end = time.time()
+            is_exists = self.table_exists()
+            if is_exists or (start-end > timeout):
+                break
+
+    def _wait_till_not_exists(self, timeout=10):
+        start = time.time()
+        while True:
+            end = time.time()
+            not_exists = not self.table_exists()
+            if not_exists or (start-end > timeout):
+                break
+
     def delete(self, key):
         p_key = self._get_partition_key(key)
         response = self.table_service.delete_entity(self.table_name, p_key, key)
@@ -98,15 +111,15 @@ class AzureKVStorage(KeyValueStorage):
 
     def destroy(self):
         response =   self.table_service.delete_table(self.table_name)
-        sleep(5)  # wait for table delete
+        self._wait_till_not_exists()
         self.logger.info(f'''Deleted Table {self.table_name} response: {response}''')
 
-    def table_exists(self, table_name):
+    def table_exists(self):
         return self.table_service.exists(self.table_name)
 
     def _create_table(self):
         response = self.table_service.create_table(self.table_name)
-        sleep(5)  # wait for table exists
+        self._wait_till_exists()
         self.logger.info(f'''Created Table {self.table_name} response: {response}''')
 
     def acquire_lock(self, key):

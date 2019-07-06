@@ -1,37 +1,26 @@
 # -*- coding: future_fstrings -*-
 
 import traceback
-import sys
-import time
 import os
 from concurrent import futures
-import datetime
 from random import shuffle
-
 from requests.auth import HTTPDigestAuth
-from common.logger import get_logger
+
+from sumoclient.base import BaseCollector
 from sumoclient.httputils import ClientMixin
-from omnistorage.factory import ProviderFactory
 from sumoclient.utils import get_current_timestamp
-from common.config import Config
 from api import ProcessMetricsAPI, ProjectEventsAPI, OrgEventsAPI, DiskMetricsAPI, LogAPI, AlertsAPI, DatabaseMetricsAPI
 
 
-class MongoDBAtlasCollector(object):
+class MongoDBAtlasCollector(BaseCollector):
 
     CONFIG_FILENAME = "mongodbatlas.yaml"
     DATA_REFRESH_TIME = 60*60*1000
 
     def __init__(self):
-        self.start_time = datetime.datetime.utcnow()
-        cfgpath = sys.argv[1] if len(sys.argv) > 1 else ''
-        self.root_dir = self.get_current_dir()
-        self.config = Config().get_config(self.CONFIG_FILENAME, self.root_dir, cfgpath)
-        self.log = get_logger(__name__, force_create=True, **self.config['Logging'])
-        self.collection_config = self.config['Collection']
+        self.project_dir = self.get_current_dir()
+        super(MongoDBAtlasCollector, self).__init__(self.project_dir)
         self.api_config = self.config['MongoDBAtlas']
-        op_cli = ProviderFactory.get_provider(self.collection_config['ENVIRONMENT'])
-        self.kvstore = op_cli.get_storage("keyvalue", name=self.config['Collection']['DBNAME'])
         self.digestauth = HTTPDigestAuth(username=self.api_config['PUBLIC_KEY'], password=self.api_config['PRIVATE_KEY'])
 
     def get_current_dir(self):
@@ -102,7 +91,8 @@ class MongoDBAtlasCollector(object):
             self._set_database_names(process_ids)
 
         current_timestamp = get_current_timestamp(milliseconds=True)
-        if current_timestamp - self.kvstore.get('database_names')['last_set_date'] > self.DATA_REFRESH_TIME:
+        databases = self.kvstore.get('database_names')
+        if current_timestamp - databases['last_set_date'] > self.DATA_REFRESH_TIME or (len(databases['values']) == 0):
             process_ids, _ = self._get_process_names()
             self._set_database_names(process_ids)
 
@@ -115,7 +105,8 @@ class MongoDBAtlasCollector(object):
             self._set_disk_names(process_ids)
 
         current_timestamp = get_current_timestamp(milliseconds=True)
-        if current_timestamp - self.kvstore.get('disk_names')['last_set_date'] > self.DATA_REFRESH_TIME:
+        disks = self.kvstore.get('disk_names')
+        if current_timestamp - disks['last_set_date'] > self.DATA_REFRESH_TIME or (len(disks['values']) == 0):
             process_ids, _ = self._get_process_names()
             self._set_disk_names(process_ids)
 
@@ -127,7 +118,8 @@ class MongoDBAtlasCollector(object):
             self._set_processes()
 
         current_timestamp = get_current_timestamp()
-        if current_timestamp - self.kvstore.get('processes')['last_set_date'] > self.DATA_REFRESH_TIME:
+        processes = self.kvstore.get('processes')
+        if current_timestamp - processes['last_set_date'] > self.DATA_REFRESH_TIME or (len(processes['process_ids']) == 0):
             self._set_processes()
 
         processes = self.kvstore.get('processes')
@@ -186,6 +178,7 @@ class MongoDBAtlasCollector(object):
                     for database_name in database_names:
                         tasks.append(DatabaseMetricsAPI(self.kvstore, process_id, database_name, self.config))
 
+        self.log.info("%d Tasks Generated" % len(tasks))
         return tasks
 
     def run(self):

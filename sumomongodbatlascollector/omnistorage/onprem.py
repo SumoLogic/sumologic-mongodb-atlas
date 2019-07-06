@@ -37,22 +37,20 @@ class OnPremKVStorage(KeyValueStorage):
     '''
     LOCK_DATE_KEY = "last_locked_date"
 
-    def setup(self, name, force_create=False, *args, **kwargs):
+    def setup(self, name, force_create=False, project_dir='', *args, **kwargs):
         self.key_locks = {}
         self.lock = threading.RLock()
-        cur_dir = os.path.dirname(__file__)
-        self.file_name = os.path.join(cur_dir, name)
-        self.logger = get_logger(__name__)
+        self.file_path = os.path.join(project_dir, name + ".db")
         if force_create:
             self.destroy()
         self.create_db()
 
     def create_db(self):
-        if os.path.isfile(self.file_name+".db"):
+        if os.path.isfile(self.file_path):
             msg = "Old db exists"
         else:
             msg = "Creating new db"
-            db = shelve.open(self.file_name)
+            db = shelve.open(self.file_path)
             db.close()
         self.logger.info(msg)
 
@@ -68,44 +66,44 @@ class OnPremKVStorage(KeyValueStorage):
         key = self._get_actual_key(key)
         value = None
         with self.lock:
-            db = shelve.open(self.file_name, flag="r")
+            db = shelve.open(self.file_path, flag="r")
             value = db.get(key, default)
             db.close()
-        self.logger.info(f'''Fetched Item {key} in {self.file_name} table''')
+        self.logger.info(f'''Fetched Item {key} in {self.file_path} table''')
         return value
 
     def set(self, key, value):
         key = self._get_actual_key(key)
         with self.lock:
-            db = shelve.open(self.file_name)
+            db = shelve.open(self.file_path)
             db[key] = value
             db.close()
-        self.logger.info(f'''Saved Item {key} in {self.file_name} table''')
+        self.logger.info(f'''Saved Item {key} in {self.file_path} table''')
 
     def delete(self, key):
         key = self._get_actual_key(key)
         with self.lock:
-            db = shelve.open(self.file_name)
+            db = shelve.open(self.file_path)
             if key in db:
                 del db[key]
             db.close()
-        self.logger.info(f'''Deleted Item {key} in {self.file_name} table''')
+        self.logger.info(f'''Deleted Item {key} in {self.file_path} table''')
 
     def has_key(self, key):
         key = self._get_actual_key(key)
         with self.lock:
-            db = shelve.open(self.file_name, flag="r")
+            db = shelve.open(self.file_path, flag="r")
             flag = key in db
             db.close()
         return flag
 
     def destroy(self):
         try:
-            if os.path.isfile(self.file_name):
-                os.remove(self.file_name)
-                self.logger.info(f'''Deleted File {self.file_name}''')
+            if os.path.isfile(self.file_path):
+                os.remove(self.file_path)
+                self.logger.info(f'''Deleted File {self.file_path}''')
             else:
-                self.logger.info(f'''File {self.file_name} does not exists''')
+                self.logger.info(f'''File {self.file_path} does not exists''')
         except OSError as e:
             raise Exception(f'''Error in removing {e.filename}:  {e.strerror}''')
 
@@ -209,7 +207,6 @@ if __name__ == "__main__":
     assert(kvstore.has_key(key) == True)
     kvstore.delete(key)
     assert(kvstore.has_key(key) == False)
-    # import ipdb;ipdb.set_trace()
     assert(kvstore.acquire_lock(key) == True)
     assert(kvstore2.acquire_lock(key) == True)
     assert(kvstore.acquire_lock("blah") == True)
