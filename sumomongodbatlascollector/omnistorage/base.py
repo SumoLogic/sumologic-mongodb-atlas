@@ -33,7 +33,7 @@ class KeyValueStorage(object):
     #Todo support atomic + updates + batch get/set
 
     def __init__(self, *args, **kwargs):
-        self.logger = get_logger(__name__) if not kwargs.get('logger') else kwargs['logger']
+        self.log = get_logger(__name__) if not kwargs.get('logger') else kwargs['logger']
         self.setup(*args, **kwargs)
 
     @abstractmethod

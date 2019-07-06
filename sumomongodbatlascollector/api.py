@@ -32,7 +32,7 @@ class FetchMixin(MongoDBAPI):
         state = None
         try:
 
-            fetch_success, content = ClientMixin.make_request(url, method="get", TIMEOUT=60, **kwargs)
+            fetch_success, content = ClientMixin.make_request(url, method="get", logger=self.log, TIMEOUT=60, **kwargs)
             if fetch_success and len(content) > 0:
                 payload, state = self.transform_data(content)
                 #Todo Make this atomic if after sending -> Ctrl - C happens then it fails to save state
@@ -62,7 +62,7 @@ class PaginatedFetchMixin(MongoDBAPI):
         try:
             while next_request:
                 send_success = has_next_page = False
-                status, data = ClientMixin.make_request(url, method="get", session=sess, TIMEOUT=60, **kwargs)
+                status, data = ClientMixin.make_request(url, method="get", session=sess, TIMEOUT=60, logger=self.log, **kwargs)
                 fetch_success = status and "results" in data
                 if fetch_success:
                     has_next_page = len(data['results']) > 0
@@ -561,7 +561,7 @@ class AlertsAPI(MongoDBAPI):
         try:
             while next_request:
                 send_success = has_next_page = False
-                status, data = ClientMixin.make_request(url, method="get", session=sess, TIMEOUT=60, **kwargs)
+                status, data = ClientMixin.make_request(url, method="get", session=sess, logger=self.log, TIMEOUT=60, **kwargs)
                 fetch_success = status and "results" in data
                 if fetch_success:
                     has_next_page = len(data['results']) > 0

@@ -3,10 +3,11 @@ import os
 from sumoclient.utils import get_logger
 import yaml
 
-log = get_logger(__name__)
-
 
 class Config(object):
+
+    def __init__(self, logger=None):
+        self.log = get_logger(__name__) if logger is None else logger
 
     def get_config(self, config_filename, root_dir, input_cfgpath=''):
         ''' reads base config and merges with user config'''
@@ -17,10 +18,10 @@ class Config(object):
         usercfg = self.get_user_config(cfg_locations)
         if not usercfg:
             usercfg = self.get_config_from_env(base_config)
-        log.info(f'''usercfg: {usercfg}''')
+        self.log.info(f'''usercfg: {usercfg}''')
         self.config = self.merge_config(base_config, usercfg)
         self.validate_config(self.config)
-        log.info(f"config object created")
+        self.log.info(f"config object created")
         return self.config
 
     def validate_config(self, config):
@@ -28,13 +29,13 @@ class Config(object):
         for section, section_cfg in config.items():
             for k, v in section_cfg.items():
                 if v is None:
-                    log.info(f"Missing parameter {k} from config")
+                    self.log.info(f"Missing parameter {k} from config")
                     has_all_params = False
         if not has_all_params:
             raise Exception("Invalid config")
 
     def get_config_from_env(self, base_config):
-        log.info("fetching parameters from environment")
+        self.log.info("fetching parameters from environment")
         cfg = {}
         for section, section_cfg in base_config.items():
             new_section_cfg = {}
@@ -69,13 +70,12 @@ class Config(object):
         return base_config
 
 
-    @classmethod
-    def read_config(cls, filepath):
-        log.info(f"Reading config file: {filepath}")
+    def read_config(self, filepath):
+        self.log.info(f"Reading config file: {filepath}")
         config = {}
         with open(filepath, 'r') as stream:
             try:
                 config = yaml.load(stream)
             except yaml.YAMLError as exc:
-                log.error(f"Unable to read config {filepath} Error: {exc}")
+                self.log.error(f"Unable to read config {filepath} Error: {exc}")
         return config

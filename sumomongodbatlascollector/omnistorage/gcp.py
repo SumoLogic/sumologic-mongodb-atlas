@@ -19,15 +19,13 @@ class GCPKVStorage(KeyValueStorage):
         if force_create:
             self.destroy()
 
-    def get(self, key, raise_exc=False):
+    def get(self, key, default=None):
         entity_key = self.datastore_cli.key(self.table_name, key)
         row = self.datastore_cli.get(entity_key)
         if not row:
-            if raise_exc:
-                raise ItemNotFound(f'Item with {key} does not exist.')
-            else:
-                return None
-        self.logger.debug(f'''Fetched Item from {self.table_name} table''')
+            self.log.warning("Key %s not Found" % key)
+            return default
+        self.log.debug(f'''Fetched Item from {self.table_name} table''')
         return row[self.VALUE_COL]
 
     def set(self, key, value):
@@ -35,16 +33,16 @@ class GCPKVStorage(KeyValueStorage):
         row = datastore.Entity(key=entity_key)
         row[self.VALUE_COL] = value
         self.datastore_cli.put(row)
-        self.logger.debug(f'''Saved Item with key {row.key.name} table {row.key.path}''')
+        self.log.debug(f'''Saved Item with key {row.key.name} table {row.key.path}''')
 
     def has_key(self, key):
-        is_present = False if self.get(key, raise_exc=False) is None else True
+        is_present = False if self.get(key) is None else True
         return is_present
 
     def delete(self, key):
         entity_key = self.datastore_cli.key(self.table_name, key)
         self.datastore_cli.delete(entity_key)  # no error in case of key not found
-        self.logger.debug(f'''Deleted Item from {self.table_name} table''')
+        self.log.debug(f'''Deleted Item from {self.table_name} table''')
 
     def destroy(self):
         # enabling it costs
@@ -52,6 +50,7 @@ class GCPKVStorage(KeyValueStorage):
         query = self.datastore_cli.query(kind=self.table_name)
         all_keys = query.keys_only()
         self.datastore_cli.delete_multi(all_keys)
+        self.log.debug(f'''Deleted Table {self.table_name}''')
 
     def acquire_lock(self, key):
         pass

@@ -22,6 +22,7 @@ class MongoDBAtlasCollector(BaseCollector):
         super(MongoDBAtlasCollector, self).__init__(self.project_dir)
         self.api_config = self.config['MongoDBAtlas']
         self.digestauth = HTTPDigestAuth(username=self.api_config['PUBLIC_KEY'], password=self.api_config['PRIVATE_KEY'])
+        self.mongosess = ClientMixin.get_new_session()
 
     def get_current_dir(self):
         cur_dir = os.path.dirname(__file__)
@@ -30,11 +31,11 @@ class MongoDBAtlasCollector(BaseCollector):
     def getpaginateddata(self, url, **kwargs):
         page_num = 0
         all_data = []
-        sess = ClientMixin.get_new_session()
+
         try:
             while True:
                 page_num += 1
-                status, data = ClientMixin.make_request(url, method="get", session=sess, TIMEOUT=60, **kwargs)
+                status, data = ClientMixin.make_request(url, method="get", session=self.mongosess, TIMEOUT=60, logger=self.log, **kwargs)
                 if status and "results" in data and len(data['results']) > 0:
                     all_data.append(data)
                     kwargs['params']['pageNum'] = page_num + 1

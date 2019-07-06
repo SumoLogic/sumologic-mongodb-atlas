@@ -32,7 +32,6 @@ class AzureKVStorage(KeyValueStorage):
         return table_service
 
     def setup(self, name, force_create=False, *args, **kwargs):
-        self.logger = get_logger(__name__)
         self.table_service = self.get_table_service()
         self.table_name = name
         if force_create:
@@ -40,16 +39,16 @@ class AzureKVStorage(KeyValueStorage):
         if not self.table_exists():
             self._create_table()
 
-    def get(self, key):
+    def get(self, key, default=None):
         p_key = self._get_partition_key(key)
         try:
             entity = self.table_service.get_entity(self.table_name, p_key, key)
             value = self._deserialize(entity[self.VALUE_COL].value)
-            self.logger.debug(f'''Fetched Item from {self.table_name} table''')
+            self.log.debug(f'''Fetched Item from {self.table_name} table''')
             return value
         except AzureMissingResourceHttpError as e:
-            self.logger.error(f'''Key: {key} Not Found''')
-            return None
+            self.log.warn(f'''Key: {key} Not Found''')
+            return default
         except Exception as e:
             raise
 
@@ -72,7 +71,7 @@ class AzureKVStorage(KeyValueStorage):
             try:
                 value = bson.loads(value)
             except Exception as e:
-                self.logger.warning("Unable to deserialize %s" % str(e))
+                self.log.warning("Unable to deserialize %s" % str(e))
         return value
 
     def set(self, key, value):
@@ -81,7 +80,7 @@ class AzureKVStorage(KeyValueStorage):
         entity["PartitionKey"] = self._get_partition_key(key)
         entity[self.KEY_COL] = key
         response = self.table_service.insert_or_replace_entity(self.table_name, entity)
-        self.logger.debug(f'''Saved Item from {self.table_name} table response: {response}''')
+        self.log.debug(f'''Saved Item from {self.table_name} table response: {response}''')
 
     def has_key(self, key):
         # Todo catch item not found in get/delete
@@ -107,12 +106,12 @@ class AzureKVStorage(KeyValueStorage):
     def delete(self, key):
         p_key = self._get_partition_key(key)
         response = self.table_service.delete_entity(self.table_name, p_key, key)
-        self.logger.debug(f'''Deleted Item from {self.table_name} table response: {response}''')
+        self.log.debug(f'''Deleted Item from {self.table_name} table response: {response}''')
 
     def destroy(self):
         response =   self.table_service.delete_table(self.table_name)
         self._wait_till_not_exists()
-        self.logger.debug(f'''Deleted Table {self.table_name} response: {response}''')
+        self.log.debug(f'''Deleted Table {self.table_name} response: {response}''')
 
     def table_exists(self):
         return self.table_service.exists(self.table_name)
@@ -120,7 +119,7 @@ class AzureKVStorage(KeyValueStorage):
     def _create_table(self):
         response = self.table_service.create_table(self.table_name)
         self._wait_till_exists()
-        self.logger.debug(f'''Created Table {self.table_name} response: {response}''')
+        self.log.debug(f'''Created Table {self.table_name} response: {response}''')
 
     def acquire_lock(self, key):
         pass

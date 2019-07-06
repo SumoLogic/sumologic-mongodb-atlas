@@ -11,7 +11,6 @@ if __name__ == "__main__":
     cur_dir = os.path.dirname(os.path.dirname(os.path.realpath(__file__)))
     sys.path.insert(0, cur_dir)
 
-from common.logger import get_logger
 from omnistorage.factory import ProviderFactory
 from omnistorage.base import Provider, KeyValueStorage
 
@@ -52,7 +51,7 @@ class OnPremKVStorage(KeyValueStorage):
             msg = "Creating new db"
             db = shelve.open(self.file_path)
             db.close()
-        self.logger.debug(msg)
+        self.log.debug(msg)
 
     def _get_actual_key(self, key):
         ''' in shelve keys needs to be string therefore converting them to strings
@@ -67,9 +66,12 @@ class OnPremKVStorage(KeyValueStorage):
         value = None
         with self.lock:
             db = shelve.open(self.file_path, flag="r")
-            value = db.get(key, default)
+            value = db.get(key, None)
             db.close()
-        self.logger.debug(f'''Fetched Item {key} in {self.file_path} table''')
+        if not value:
+            self.log.warning("Key %s not Found" % key)
+            return default
+        self.log.debug(f'''Fetched Item {key} in {self.file_path} table''')
         return value
 
     def set(self, key, value):
@@ -78,7 +80,7 @@ class OnPremKVStorage(KeyValueStorage):
             db = shelve.open(self.file_path)
             db[key] = value
             db.close()
-        self.logger.debug(f'''Saved Item {key} in {self.file_path} table''')
+        self.log.debug(f'''Saved Item {key} in {self.file_path} table''')
 
     def delete(self, key):
         key = self._get_actual_key(key)
@@ -87,7 +89,7 @@ class OnPremKVStorage(KeyValueStorage):
             if key in db:
                 del db[key]
             db.close()
-        self.logger.debug(f'''Deleted Item {key} in {self.file_path} table''')
+        self.log.debug(f'''Deleted Item {key} in {self.file_path} table''')
 
     def has_key(self, key):
         key = self._get_actual_key(key)
@@ -101,9 +103,9 @@ class OnPremKVStorage(KeyValueStorage):
         try:
             if os.path.isfile(self.file_path):
                 os.remove(self.file_path)
-                self.logger.debug(f'''Deleted File {self.file_path}''')
+                self.log.debug(f'''Deleted File {self.file_path}''')
             else:
-                self.logger.debug(f'''File {self.file_path} does not exists''')
+                self.log.debug(f'''File {self.file_path} does not exists''')
         except OSError as e:
             raise Exception(f'''Error in removing {e.filename}:  {e.strerror}''')
 
@@ -121,13 +123,13 @@ class OnPremKVStorage(KeyValueStorage):
                 if os.path.exists(lockfile):
                     os.unlink(lockfile)
                 self.key_locks[lockkey] = os.open(lockfile, os.O_CREAT | os.O_EXCL | os.O_RDWR | os.O_NONBLOCK) # is this non blocking?
-                self.logger.debug("acquired_lock lockfile: %s" % lockfile)
+                self.log.debug("acquired_lock lockfile: %s" % lockfile)
                 self.set(lockkey, {self.LOCK_DATE_KEY: time.time()})
                 return True
             except OSError:
                 _, e, tb = sys.exc_info()
                 if e.errno == 13:
-                    self.logger.warning("Another instance is already running, quitting. %s" % (e))
+                    self.log.warning("Another instance is already running, quitting. %s" % (e))
                     return False
                 else:
                     raise
@@ -137,11 +139,11 @@ class OnPremKVStorage(KeyValueStorage):
                 self.key_locks[lockkey].flush()
             try:
                 fcntl.lockf(self.key_locks[lockkey], fcntl.LOCK_EX | fcntl.LOCK_NB) # non blocking
-                self.logger.debug("acquired_lock lockfile: %s" % lockfile)
+                self.log.debug("acquired_lock lockfile: %s" % lockfile)
                 self.set(lockkey, {self.LOCK_DATE_KEY: time.time()})
                 return True
             except IOError:
-                self.logger.warning("Another instance is already running, quitting.")
+                self.log.warning("Another instance is already running, quitting.")
                 return False
 
     def release_lock(self, key):
@@ -159,13 +161,13 @@ class OnPremKVStorage(KeyValueStorage):
                     os.unlink(lockfile)
                 del self.key_locks[lockkey]
                 self.delete(lockkey)
-                self.logger.debug("released_lock lockfile: %s" % lockfile)
+                self.log.debug("released_lock lockfile: %s" % lockfile)
                 return True
             except Exception as e:
-                self.logger.error("release_lock error")
+                self.log.error("release_lock error")
                 raise
         else:
-            self.logger.warning("lock not found lockfile: %s" % lockfile)
+            self.log.warning("lock not found lockfile: %s" % lockfile)
             return False
 
     def release_lock_on_expired_key(self, key, expiry_min=5):
@@ -175,11 +177,11 @@ class OnPremKVStorage(KeyValueStorage):
             now = time.time()
             past = data[self.LOCK_DATE_COL]
             if (now - past) > expiry_min * 60:
-                self.logger.debug(f'''Lock time expired key: {key} passed time: {(now-past)/60} min''')
+                self.log.debug(f'''Lock time expired key: {key} passed time: {(now-past)/60} min''')
                 self.release_lock(key)
         else:
             lockfile = os.path.normpath(tempfile.gettempdir() + '/' + lock_key)
-            self.logger.debug("remove lock forcefully by removing %s" % lockfile)
+            self.log.debug("remove lock forcefully by removing %s" % lockfile)
 
 
 class OnPremProvider(Provider):

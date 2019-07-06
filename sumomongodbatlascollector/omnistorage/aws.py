@@ -124,10 +124,10 @@ class AWSKVStorage(KeyValueStorage):
         if response.get('ResponseMetadata')['HTTPStatusCode'] != 200:
             raise Exception(f'''Error in get_item api: {response}''')
         value = response["Item"][self.VALUE_COL] if response.get("Item") else None
-        self.logger.debug(f'''Fetched Item {key} from {self.table_name} table''')
+        self.log.debug(f'''Fetched Item {key} from {self.table_name} table''')
         return self._replace_decimals(value)
 
-    def _get_item(self, key):
+    def _get_item(self, key, default=None):
         table = self.dynamodbcli.Table(self.table_name)
         response = table.get_item(Key={self.KEY_COL: key},
                                   ConsistentRead=True,
@@ -135,9 +135,11 @@ class AWSKVStorage(KeyValueStorage):
         if response.get('ResponseMetadata')['HTTPStatusCode'] != 200:
             raise Exception(f'''Error in get_item api: {response}''')
         item = response.get("Item", {})
-        if item:
-            item[self.VALUE_COL]=self._replace_decimals(item[self.VALUE_COL])
-        self.logger.debug(f'''Fetched Item {key} from {self.table_name} table''')
+        if not item:
+            self.log.warning("Key %s not Found" % key)
+            return default
+        item[self.VALUE_COL] = self._replace_decimals(item[self.VALUE_COL])
+        self.log.debug(f'''Fetched Item {key} from {self.table_name} table''')
         return item
 
     def set(self, key, value):
@@ -150,7 +152,7 @@ class AWSKVStorage(KeyValueStorage):
                                   ReturnConsumedCapacity='TOTAL')
         if response.get('ResponseMetadata')['HTTPStatusCode'] != 200:
             raise Exception(f'''Error in put_item api: {response}''')
-        self.logger.debug(f'''Saved Item {key} from {self.table_name} table response: {response}''')
+        self.log.debug(f'''Saved Item {key} from {self.table_name} table response: {response}''')
 
     def has_key(self, key):
         # Todo catch item not found in get/delete
@@ -162,14 +164,14 @@ class AWSKVStorage(KeyValueStorage):
         response = table.delete_item(Key={self.KEY_COL: key})
         if response.get('ResponseMetadata')['HTTPStatusCode'] != 200:
             raise Exception(f'''Error in delete_item api: {response}''')
-        self.logger.debug(f'''Deleted Item {key} from {self.table_name} table response: {response}''')
+        self.log.debug(f'''Deleted Item {key} from {self.table_name} table response: {response}''')
 
     def destroy(self):
         table = self.dynamodbcli.Table(self.table_name)
         try:
             response = table.delete()
             table.wait_until_not_exists()
-            self.logger.debug(f'''Deleted Table {self.table_name} response: {response}''')
+            self.log.debug(f'''Deleted Table {self.table_name} response: {response}''')
         except ClientError as e:
             if e.response['Error']['Code'] != 'ResourceNotFoundException':
                 raise e
@@ -214,12 +216,12 @@ class AWSKVStorage(KeyValueStorage):
                 raise Exception(f'''Error in put_item api: {response}''')
         except ClientError as e:
             if e.response['Error']['Code'] == "ConditionalCheckFailedException":
-                self.logger.warning(f'''Failed to acquire lock on key: {key} Message: {e.response['Error']['Message']}''')
+                self.log.warning(f'''Failed to acquire lock on key: {key} Message: {e.response['Error']['Message']}''')
             else:
-                self.logger.error(f'''Error in Acquiring lock {str(e)}''')
+                self.log.error(f'''Error in Acquiring lock {str(e)}''')
             return False
         else:
-            self.logger.debug(f'''Lock acquired key: {key} Message: {response["Attributes"]}''')
+            self.log.debug(f'''Lock acquired key: {key} Message: {response["Attributes"]}''')
             return True
 
     def release_lock_on_expired_key(self, key, expiry_min=5):
@@ -229,7 +231,7 @@ class AWSKVStorage(KeyValueStorage):
             now = time.time()
             past = convert_date_to_epoch(data[self.LOCK_DATE_COL])
             if (now - past) > expiry_min*60:
-                self.logger.debug(f'''Lock time expired key: {key} passed time: {(now-past)/60} min''')
+                self.log.debug(f'''Lock time expired key: {key} passed time: {(now-past)/60} min''')
                 self.release_lock(key)
 
     def release_lock(self, key):
@@ -255,12 +257,12 @@ class AWSKVStorage(KeyValueStorage):
                 raise Exception(f'''Error in put_item api: {response}''')
         except ClientError as e:
             if e.response['Error']['Code'] == "ConditionalCheckFailedException":
-                self.logger.warning(f'''Failed to release lock on key: {key} Message: {e.response['Error']['Message']}''')
+                self.log.warning(f'''Failed to release lock on key: {key} Message: {e.response['Error']['Message']}''')
             else:
-                self.logger.error(f'''Error in Releasing lock {str(e)}''')
+                self.log.error(f'''Error in Releasing lock {str(e)}''')
             return False
         else:
-            self.logger.debug(f'''Lock released key: {key} Message: {response["Attributes"]}''')
+            self.log.debug(f'''Lock released key: {key} Message: {response["Attributes"]}''')
             return True
 
 
@@ -299,7 +301,7 @@ class AWSKVStorage(KeyValueStorage):
             }
         )
         table.wait_until_exists()
-        self.logger.debug(f'''Table {self.table_name} created''')
+        self.log.debug(f'''Table {self.table_name} created''')
 
     @classmethod
     def batch_insert(cls, dynamodbcli, rows, table_name, logger=get_logger(__name__)):

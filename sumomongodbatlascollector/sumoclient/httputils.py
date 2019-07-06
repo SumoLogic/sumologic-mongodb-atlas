@@ -24,8 +24,8 @@ class ClientMixin(object):
         return sess
 
     @classmethod
-    def make_request(cls, url, method="get", session=None, TIMEOUT=5, is_file=False, **kwargs):
-        log = get_logger(__name__)
+    def make_request(cls, url, method="get", session=None, TIMEOUT=5, is_file=False, logger=None, **kwargs):
+        log = get_logger(__name__) if logger is None else logger
         start_time = datetime.now()
         sess = session if session else cls.get_new_session()
         try:
@@ -33,7 +33,7 @@ class ClientMixin(object):
             if 400 <= resp.status_code < 600:
                 resp.reason = resp.text
             resp.raise_for_status()
-            log.info(f'''{method} Request url: {url} status_code: {resp.status_code}''')
+            log.debug(f'''MethodType: {method} Request url: {url} status_code: {resp.status_code}''')
             if resp.status_code == 200:
                 if is_file:
                     data = resp.content
@@ -64,11 +64,11 @@ class ClientMixin(object):
 class SessionPool(object):
     # by default request library will not timeout for any request
     # session is not thread safe hence each thread gets new session
-    def __init__(self, max_retry, backoff):
+    def __init__(self, max_retry, backoff, logger=None):
         self.sessions = {}
         self.max_retry = max_retry
         self.backoff = backoff
-        self.log = get_logger(__name__)
+        self.log = get_logger(__name__) if logger is None else logger
 
     def get_thread_id(self):
         try:
@@ -82,19 +82,19 @@ class SessionPool(object):
         if thread_id in self.sessions:
             return self.sessions[thread_id]
         else:
-            self.log.info(f'''Creating session for {thread_id}''')
+            self.log.debug(f'''Creating session for {thread_id}''')
             sess = ClientMixin.get_new_session()
             self.sessions[thread_id] = sess
             return sess
 
     def closeall(self):
-        self.log.info("Closing all sessions")
+        self.log.debug("Closing all sessions")
         for _, v in self.sessions.items():
             v.close()
 
     def close(self):
         thread_id = self.get_thread_id()
-        self.log.info(f'Deleting session for {thread_id}')
+        self.log.debug(f'Deleting session for {thread_id}')
         if thread_id in self.sessions:
             self.sessions[thread_id].close()
             del self.sessions[thread_id]

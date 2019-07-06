@@ -13,7 +13,7 @@ class HTTPHandler(BaseOutputHandler):
     def setUp(self, config, *args, **kwargs):
         self.sumo_config = config["SumoLogic"]
         self.collection_config = config['Collection']
-        self.sumoconn = SessionPool(self.collection_config['MAX_RETRY'], self.collection_config['BACKOFF_FACTOR'])
+        self.sumoconn = SessionPool(self.collection_config['MAX_RETRY'], self.collection_config['BACKOFF_FACTOR'], logger=self.log)
 
     def send(self, data, extra_headers=None, jsondump=True, endpoint_key='SUMO_ENDPOINT'):
         if not data:
@@ -37,7 +37,7 @@ class HTTPHandler(BaseOutputHandler):
 
             fetch_success, respjson = ClientMixin.make_request(self.sumo_config[endpoint_key], method="post",
                                                                session=sess, data=body, TIMEOUT=self.collection_config['TIMEOUT'],
-                                                               headers=headers)
+                                                               headers=headers, logger=self.log)
             if not fetch_success:
                 self.log.error(f'''Error in Sending to Sumo {respjson}''')
                 return False
