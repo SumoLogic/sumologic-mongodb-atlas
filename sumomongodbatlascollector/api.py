@@ -25,9 +25,11 @@ class MongoDBAPI(BaseAPI):
 class FetchMixin(MongoDBAPI):
 
     def fetch(self):
-        self.log.info(f'''getting LogType: {self._get_key()}''')
+        log_type = self._get_key()
         output_handler = OutputHandlerFactory.get_handler(self.collection_config['OUTPUT_HANDLER'], path=self.pathname, config=self.config)
         url, kwargs = self.build_fetch_params()
+        self.log.info(f'''Fetching LogType: {log_type} kwargs: {kwargs}''')
+        state = None
         try:
 
             fetch_success, content = ClientMixin.make_request(url, method="get", TIMEOUT=60, **kwargs)
@@ -39,12 +41,12 @@ class FetchMixin(MongoDBAPI):
                     self.save_state(**state)
                     self.log.info(f'''Successfully sent LogType: {self._get_key()} Data: {len(content)}''')
                 else:
-                    self.log.error(f'''Failed to sent LogType: {self._get_key()}''')
+                    self.log.error(f'''Failed to send LogType: {self._get_key()}''')
             else:
                 self.log.info(f'''No results status: {fetch_success} reason: {content}''')
         finally:
             output_handler.close()
-
+            self.log.info(f'''Completed LogType: {log_type} curstate: {state}''')
 
 class PaginatedFetchMixin(MongoDBAPI):
 
@@ -56,6 +58,7 @@ class PaginatedFetchMixin(MongoDBAPI):
         next_request = True
         count = 0
         sess = ClientMixin.get_new_session()
+        self.log.info(f'''Fetching LogType: {log_type}  starttime: {kwargs['params']['minDate']} endtime: {kwargs['params']['maxDate']}''')
         try:
             while next_request:
                 send_success = has_next_page = False
@@ -68,7 +71,7 @@ class PaginatedFetchMixin(MongoDBAPI):
                         send_success = output_handler.send(payload, **self.build_send_params())
                         if send_success:
                             count +=1
-                            self.log.info(f'''Fetching LogType: {log_type} Page: {kwargs['params']['pageNum']}  Datalen: {len(payload)} starttime: {kwargs['params']['minDate']} endtime: {kwargs['params']['maxDate']}''')
+                            self.log.debug(f'''Fetching LogType: {log_type} Page: {kwargs['params']['pageNum']}  Datalen: {len(payload)} starttime: {kwargs['params']['minDate']} endtime: {kwargs['params']['maxDate']}''')
                             kwargs['params']['pageNum'] += 1
                             # save and update last_time_epoch required for next invocation
                             current_state.update(updated_state)
@@ -82,7 +85,7 @@ class PaginatedFetchMixin(MongoDBAPI):
                                 })
                         else:
                             # show err unable to send save current state
-                            self.log.error(f'''Unable to send LogType: {log_type} Page: {kwargs['params']['pageNum']} starttime: {kwargs['params']['minDate']} endtime: {kwargs['params']['maxDate']}''')
+                            self.log.error(f'''Failed to send LogType: {log_type} Page: {kwargs['params']['pageNum']} starttime: {kwargs['params']['minDate']} endtime: {kwargs['params']['maxDate']}''')
                             self.save_state({
                                 "start_time_epoch": convert_utc_date_to_epoch(kwargs['params']['minDate']),
                                 "end_time_epoch": convert_utc_date_to_epoch(kwargs['params']['maxDate']),
@@ -90,8 +93,8 @@ class PaginatedFetchMixin(MongoDBAPI):
                                 "last_time_epoch": current_state['last_time_epoch']
                             })
                     else:
-                        self.log.info(f'''Moving starttime window LogType: {log_type} Page: {kwargs['params']['pageNum']} starttime: {kwargs['params']['minDate']} endtime: {kwargs['params']['maxDate']}''')
-                        # here send success is false
+                        self.log.debug(f'''Moving starttime window LogType: {log_type} Page: {kwargs['params']['pageNum']} starttime: {kwargs['params']['minDate']} endtime: {kwargs['params']['maxDate']}''')
+                        # here fetch success is false and assuming pageNum starts from 1
                         # genuine no result window no change
                         # page_num has finished increase window calc last_time_epoch  and add 1
                         if kwargs['params']['pageNum'] > 1:
@@ -100,7 +103,7 @@ class PaginatedFetchMixin(MongoDBAPI):
                                 "last_time_epoch": current_state['last_time_epoch'] + self.MOVING_WINDOW_DELTA
                             })
                 else:
-                    self.log.error(f'''Unable to fetch LogType: {log_type} Page: {kwargs['params']['pageNum']} Reason: {data} starttime: {kwargs['params']['minDate']} endtime: {kwargs['params']['maxDate']}''')
+                    self.log.error(f'''Failed to fetch LogType: {log_type} Page: {kwargs['params']['pageNum']} Reason: {data} starttime: {kwargs['params']['minDate']} endtime: {kwargs['params']['maxDate']}''')
                 next_request = fetch_success and send_success and has_next_page and self.is_time_remaining()
         finally:
             sess.close()
@@ -368,25 +371,6 @@ class DatabaseMetricsAPI(FetchMixin):
                 last_time_epoch = max(current_timestamp, last_time_epoch)
         return metrics, {"last_time_epoch": last_time_epoch}
 
-    def fetch(self):
-        self.log.info(f'''getting process_id: {self.process_id} database_name: {self.database_name} project_id: {self.api_config['PROJECT_ID']}''')
-        output_handler = OutputHandlerFactory.get_handler(self.collection_config['OUTPUT_HANDLER'], path=self.pathname, config=self.config)
-        url, kwargs = self.build_fetch_params()
-        try:
-            fetch_success, content = ClientMixin.make_request(url, method="get", TIMEOUT=60, **kwargs)
-            if fetch_success and len(content) > 0:
-                payload, state = self.transform_data(content)
-                send_success = output_handler.send(payload, **self.build_send_params())
-                if send_success:
-                    self.save_state(**state)
-                    self.log.info(f'''Successfully sent process_id: {self.process_id} database_name: {self.database_name} project_id: {self.api_config['PROJECT_ID']} Data: {len(content)}''')
-                else:
-                    self.log.error(f'''Failed to sent process_id: {self.process_id} database_name: {self.database_name} project_id: {self.api_config['PROJECT_ID']}''')
-            else:
-                self.log.info(f'''No results status: {fetch_success} reason: {content}''')
-        finally:
-            output_handler.close()
-
 
 class ProjectEventsAPI(PaginatedFetchMixin):
 
@@ -571,7 +555,9 @@ class AlertsAPI(MongoDBAPI):
         url, kwargs = self.build_fetch_params()
         next_request = True
         sess = ClientMixin.get_new_session()
+        log_type = self._get_key()
         count = 0
+        self.log.info(f'''Fetching LogType: {log_type} pageNum: {kwargs["params"]["pageNum"]}''')
         try:
             while next_request:
                 send_success = has_next_page = False
@@ -584,7 +570,7 @@ class AlertsAPI(MongoDBAPI):
                         send_success = output_handler.send(payload, **self.build_send_params())
                         if send_success:
                             count += 1
-                            self.log.info(f'''Fetching Project: {self.api_config['PROJECT_ID']} Alerts Page: {kwargs['params']['pageNum']}  Datalen: {len(payload)} ''')
+                            self.log.debug(f'''Fetching Project: {self.api_config['PROJECT_ID']} Alerts Page: {kwargs['params']['pageNum']}  Datalen: {len(payload)} ''')
                             current_state.update(updated_state)
                             if current_state['last_page_offset'] == 0:
                                 # do not increase if num alerts < page limit
@@ -605,7 +591,7 @@ class AlertsAPI(MongoDBAPI):
                                 "last_page_offset": current_state['last_page_offset']
                             })
                     else:
-                        self.log.info(f'''Moving starttime window Project: {self.api_config['PROJECT_ID']} Alerts Page: {kwargs['params']['pageNum']} ''')
+                        self.log.debug(f'''Moving starttime window Project: {self.api_config['PROJECT_ID']} Alerts Page: {kwargs['params']['pageNum']} ''')
                         # here send success is false
                         # genuine no result window no change
                         # page_num has finished increase window calc last_time_epoch  and add 1
@@ -618,5 +604,5 @@ class AlertsAPI(MongoDBAPI):
                 next_request = fetch_success and send_success and has_next_page and self.is_time_remaining()
         finally:
             sess.close()
-            self.log.info(f'''Completed Project: {self.api_config['PROJECT_ID']} Count: {count} Events Page: {kwargs['params']['pageNum']}''')
+            self.log.info(f'''Completed LogType: {log_type} Count: {count} Page: {kwargs['params']['pageNum']}''')
 

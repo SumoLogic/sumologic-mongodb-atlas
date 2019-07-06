@@ -27,7 +27,7 @@ class GCPKVStorage(KeyValueStorage):
                 raise ItemNotFound(f'Item with {key} does not exist.')
             else:
                 return None
-        self.logger.info(f'''Fetched Item from {self.table_name} table''')
+        self.logger.debug(f'''Fetched Item from {self.table_name} table''')
         return row[self.VALUE_COL]
 
     def set(self, key, value):
@@ -35,7 +35,7 @@ class GCPKVStorage(KeyValueStorage):
         row = datastore.Entity(key=entity_key)
         row[self.VALUE_COL] = value
         self.datastore_cli.put(row)
-        self.logger.info(f'''Saved Item with key {row.key.name} table {row.key.path}''')
+        self.logger.debug(f'''Saved Item with key {row.key.name} table {row.key.path}''')
 
     def has_key(self, key):
         is_present = False if self.get(key, raise_exc=False) is None else True
@@ -44,7 +44,7 @@ class GCPKVStorage(KeyValueStorage):
     def delete(self, key):
         entity_key = self.datastore_cli.key(self.table_name, key)
         self.datastore_cli.delete(entity_key)  # no error in case of key not found
-        self.logger.info(f'''Deleted Item from {self.table_name} table''')
+        self.logger.debug(f'''Deleted Item from {self.table_name} table''')
 
     def destroy(self):
         # enabling it costs

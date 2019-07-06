@@ -22,7 +22,7 @@ class HTTPHandler(BaseOutputHandler):
         headers = {
             "content-type": "application/json",
             "accept": "application/json",
-            "X-Sumo-Client": "sumologic-mongodbatlas-collector"
+            "X-Sumo-Client": self.collection_config['PACKAGENAME']
         }
 
         if extra_headers:
@@ -30,7 +30,7 @@ class HTTPHandler(BaseOutputHandler):
 
         for idx, batch in enumerate(self.bytesize_chunking(data, self.collection_config.get("MAX_PAYLOAD_BYTESIZE", 500000), jsondump), start=1):
             body = get_body(batch, jsondump)
-            self.log.info(f'''Sending batch {idx} len: {len(body)}''')
+            self.log.debug(f'''Sending batch {idx} len: {len(body)}''')
             if self.collection_config.get("COMPRESSED", True):
                 body = zlib.compress(body)
                 headers.update({"Content-Encoding": "deflate"})
@@ -67,7 +67,7 @@ class HTTPHandler(BaseOutputHandler):
         if payload:
             num_batches += 1
             yield payload
-        self.log.info(f'''Chunking data total_size: {total_byte_size} num_batches: {num_batches}''')
+        self.log.debug(f'''Chunking data total_size: {total_byte_size} num_batches: {num_batches}''')
 
     @classmethod
     def batchsize_chunking(cls, iterable, size=1):
@@ -101,7 +101,7 @@ class STDOUTHandler(BaseOutputHandler):
         if not data:
             return
         body = get_body(data)
-        self.log.info(f'Posting data: len {len(body)}')
+        self.log.debug(f'Posting data: len {len(body)}')
         print(body)
         return True
 
@@ -119,7 +119,7 @@ class FileHandler(BaseOutputHandler):
         if not data:
             return
         body = get_body(data)
-        self.log.info(f'Posting data: len {len(body)}')
+        self.log.debug(f'Posting data: len {len(body)}')
         self.fp.write(body)
         return True
 

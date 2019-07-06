@@ -111,6 +111,7 @@ Logging:
  ENABLE_CONSOLE_LOG: true
  ENABLE_LOGFILE: false
  LOG_FILEPATH: /tmp/mongodbatlascollector.log
+ LOG_LEVEL: "DEBUG"
 
 Collection:
  ENVIRONMENT: onprem
@@ -124,6 +125,7 @@ Collection:
  END_TIME_EPOCH_OFFSET_SECONDS: 120
  BACKFILL_DAYS: 1
  DBNAME: "mongodbatlas"
+ PACKAGENAME: "sumologic-mongodb-atlas"
 
 SumoLogic:
  LOGS_SUMO_ENDPOINT: null

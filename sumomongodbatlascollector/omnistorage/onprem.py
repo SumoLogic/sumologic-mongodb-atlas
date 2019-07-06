@@ -52,7 +52,7 @@ class OnPremKVStorage(KeyValueStorage):
             msg = "Creating new db"
             db = shelve.open(self.file_path)
             db.close()
-        self.logger.info(msg)
+        self.logger.debug(msg)
 
     def _get_actual_key(self, key):
         ''' in shelve keys needs to be string therefore converting them to strings
@@ -69,7 +69,7 @@ class OnPremKVStorage(KeyValueStorage):
             db = shelve.open(self.file_path, flag="r")
             value = db.get(key, default)
             db.close()
-        self.logger.info(f'''Fetched Item {key} in {self.file_path} table''')
+        self.logger.debug(f'''Fetched Item {key} in {self.file_path} table''')
         return value
 
     def set(self, key, value):
@@ -78,7 +78,7 @@ class OnPremKVStorage(KeyValueStorage):
             db = shelve.open(self.file_path)
             db[key] = value
             db.close()
-        self.logger.info(f'''Saved Item {key} in {self.file_path} table''')
+        self.logger.debug(f'''Saved Item {key} in {self.file_path} table''')
 
     def delete(self, key):
         key = self._get_actual_key(key)
@@ -87,7 +87,7 @@ class OnPremKVStorage(KeyValueStorage):
             if key in db:
                 del db[key]
             db.close()
-        self.logger.info(f'''Deleted Item {key} in {self.file_path} table''')
+        self.logger.debug(f'''Deleted Item {key} in {self.file_path} table''')
 
     def has_key(self, key):
         key = self._get_actual_key(key)
@@ -101,9 +101,9 @@ class OnPremKVStorage(KeyValueStorage):
         try:
             if os.path.isfile(self.file_path):
                 os.remove(self.file_path)
-                self.logger.info(f'''Deleted File {self.file_path}''')
+                self.logger.debug(f'''Deleted File {self.file_path}''')
             else:
-                self.logger.info(f'''File {self.file_path} does not exists''')
+                self.logger.debug(f'''File {self.file_path} does not exists''')
         except OSError as e:
             raise Exception(f'''Error in removing {e.filename}:  {e.strerror}''')
 
@@ -175,11 +175,11 @@ class OnPremKVStorage(KeyValueStorage):
             now = time.time()
             past = data[self.LOCK_DATE_COL]
             if (now - past) > expiry_min * 60:
-                self.logger.info(f'''Lock time expired key: {key} passed time: {(now-past)/60} min''')
+                self.logger.debug(f'''Lock time expired key: {key} passed time: {(now-past)/60} min''')
                 self.release_lock(key)
         else:
             lockfile = os.path.normpath(tempfile.gettempdir() + '/' + lock_key)
-            self.logger.info("remove lock forcefully by removing %s" % lockfile)
+            self.logger.debug("remove lock forcefully by removing %s" % lockfile)
 
 
 class OnPremProvider(Provider):

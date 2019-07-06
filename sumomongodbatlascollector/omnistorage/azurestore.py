@@ -45,10 +45,10 @@ class AzureKVStorage(KeyValueStorage):
         try:
             entity = self.table_service.get_entity(self.table_name, p_key, key)
             value = self._deserialize(entity[self.VALUE_COL].value)
-            self.logger.info(f'''Fetched Item from {self.table_name} table''')
+            self.logger.debug(f'''Fetched Item from {self.table_name} table''')
             return value
         except AzureMissingResourceHttpError as e:
-            self.logger.info(f'''Key: {key} Not Found''')
+            self.logger.error(f'''Key: {key} Not Found''')
             return None
         except Exception as e:
             raise
@@ -81,7 +81,7 @@ class AzureKVStorage(KeyValueStorage):
         entity["PartitionKey"] = self._get_partition_key(key)
         entity[self.KEY_COL] = key
         response = self.table_service.insert_or_replace_entity(self.table_name, entity)
-        self.logger.info(f'''Saved Item from {self.table_name} table response: {response}''')
+        self.logger.debug(f'''Saved Item from {self.table_name} table response: {response}''')
 
     def has_key(self, key):
         # Todo catch item not found in get/delete
@@ -107,12 +107,12 @@ class AzureKVStorage(KeyValueStorage):
     def delete(self, key):
         p_key = self._get_partition_key(key)
         response = self.table_service.delete_entity(self.table_name, p_key, key)
-        self.logger.info(f'''Deleted Item from {self.table_name} table response: {response}''')
+        self.logger.debug(f'''Deleted Item from {self.table_name} table response: {response}''')
 
     def destroy(self):
         response =   self.table_service.delete_table(self.table_name)
         self._wait_till_not_exists()
-        self.logger.info(f'''Deleted Table {self.table_name} response: {response}''')
+        self.logger.debug(f'''Deleted Table {self.table_name} response: {response}''')
 
     def table_exists(self):
         return self.table_service.exists(self.table_name)
@@ -120,7 +120,7 @@ class AzureKVStorage(KeyValueStorage):
     def _create_table(self):
         response = self.table_service.create_table(self.table_name)
         self._wait_till_exists()
-        self.logger.info(f'''Created Table {self.table_name} response: {response}''')
+        self.logger.debug(f'''Created Table {self.table_name} response: {response}''')
 
     def acquire_lock(self, key):
         pass

@@ -127,11 +127,11 @@ class MongoDBAtlasCollector(BaseCollector):
         return process_ids, hostnames
 
     def is_running(self):
-        self.log.info("Acquiring single instance lock")
+        self.log.debug("Acquiring single instance lock")
         return self.kvstore.acquire_lock('is_running')
 
     def stop_running(self):
-        self.log.info("Releasing single instance lock")
+        self.log.debug("Releasing single instance lock")
         return self.kvstore.release_lock('is_running')
 
     def build_task_params(self):
@@ -188,7 +188,7 @@ class MongoDBAtlasCollector(BaseCollector):
                 task_params = self.build_task_params()
                 shuffle(task_params)
                 all_futures = {}
-                self.log.info("spawning %d workers" % self.config['Collection']['NUM_WORKERS'])
+                self.log.debug("spawning %d workers" % self.config['Collection']['NUM_WORKERS'])
                 with futures.ThreadPoolExecutor(max_workers=self.config['Collection']['NUM_WORKERS']) as executor:
                     results = {executor.submit(apiobj.fetch): apiobj for apiobj in task_params}
                     all_futures.update(results)

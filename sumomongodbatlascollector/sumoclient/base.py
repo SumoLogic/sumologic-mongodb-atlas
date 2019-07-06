@@ -75,7 +75,7 @@ class BaseAPI(object):
     def is_time_remaining(self):
         now = datetime.datetime.utcnow()
         time_passed = (now - self.start_time).total_seconds()
-        self.log.info("checking time_passed: %s" % time_passed)
+        self.log.debug("checking time_passed: %s" % time_passed)
         has_time = time_passed + self.STOP_TIME_OFFSET_SECONDS < self.get_function_timeout()
         if not has_time:
             self.log.info("Shutting down not enough time")
