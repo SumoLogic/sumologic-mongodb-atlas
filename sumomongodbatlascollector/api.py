@@ -5,10 +5,10 @@ import json
 from io import BytesIO
 from requests.auth import HTTPDigestAuth
 
-from sumoclient.base import BaseAPI
-from sumoclient.factory import OutputHandlerFactory
-from sumoclient.utils import get_current_timestamp, convert_epoch_to_utc_date, convert_utc_date_to_epoch, convert_date_to_epoch
-from sumoclient.httputils import ClientMixin
+from sumoappclient.sumoclient.base import BaseAPI
+from sumoappclient.sumoclient.factory import OutputHandlerFactory
+from sumoappclient.sumoclient.utils import get_current_timestamp, convert_epoch_to_utc_date, convert_utc_date_to_epoch, convert_date_to_epoch
+from sumoappclient.sumoclient.httputils import ClientMixin
 
 
 class MongoDBAPI(BaseAPI):

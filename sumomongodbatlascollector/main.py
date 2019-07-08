@@ -6,9 +6,9 @@ from concurrent import futures
 from random import shuffle
 from requests.auth import HTTPDigestAuth
 
-from sumoclient.base import BaseCollector
-from sumoclient.httputils import ClientMixin
-from sumoclient.utils import get_current_timestamp
+from sumoappclient.sumoclient.base import BaseCollector
+from sumoappclient.sumoclient.httputils import ClientMixin
+from sumoappclient.sumoclient.utils import get_current_timestamp
 from api import ProcessMetricsAPI, ProjectEventsAPI, OrgEventsAPI, DiskMetricsAPI, LogAPI, AlertsAPI, DatabaseMetricsAPI
 
 

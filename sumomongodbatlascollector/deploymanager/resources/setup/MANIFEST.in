@@ -1,5 +1,0 @@
-include README
-include LICENSE
-include VERSION
-include requirements.txt
-include $SRC_FOLDER_NAME/$COLLECTION_CONFIG

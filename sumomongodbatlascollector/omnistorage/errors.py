@@ -1,3 +1,0 @@
-
-class ItemNotFound(ValueError):
-    pass
