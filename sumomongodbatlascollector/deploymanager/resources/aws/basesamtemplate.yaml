@@ -1,22 +1,22 @@
 AWSTemplateFormatVersion: '2010-09-09'
 Description: 'This solution consists of a lambda functions which is used to fetch
-  logs from $APPNAME and ingest to Sumo Logic.
+  logs from ${APPNAME} and ingest to Sumo Logic.
 
   '
 Outputs:
-  $APPNAME_SINGLEFunction:
-    Description: $APPNAME_SINGLEScheduler Function ARN
+  ${APPNAME_SINGLE}Function:
+    Description: ${APPNAME_SINGLE}Scheduler Function ARN
     Value:
       Fn::GetAtt:
-      - $APPNAME_SINGLESchedulerFunction
+      - ${APPNAME_SINGLE}Function
       - Arn
 Parameters:
 
 Resources:
 
-  $APPNAME_SINGLEFunction:
+  ${APPNAME_SINGLE}Function:
     Properties:
-      CodeUri: s3://appdevstore/$APPNAME_SINGLE.zip
+      CodeUri: s3://appdevstore/${APPNAME_SINGLE}.zip
       Environment:
         Variables:
           ENVIRONMENT: "aws"
@@ -26,13 +26,9 @@ Resources:
             Schedule: rate(5 minutes)
           Type: Schedule
       Handler: main.main
-#      Layers:
-#      - Fn::Sub: arn:aws:lambda:${AWS::Region}:956882708938:layer:securityhub_deps:1
       MemorySize: 256
       Policies:
           - AmazonDynamoDBFullAccess
-          - LambdaInvokePolicy:
-              FunctionName: Ref: $APPNAME_SINGLESchedulerFunction
       Runtime: python3.7
       Timeout: 300
     Type: AWS::Serverless::Function

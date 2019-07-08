@@ -19,7 +19,7 @@ class MongoDBAPI(BaseAPI):
     def __init__(self, kvstore, config):
         super(MongoDBAPI, self).__init__(kvstore, config)
         self.api_config = self.config['MongoDBAtlas']
-        self.digestauth = HTTPDigestAuth(username=self.api_config['PUBLIC_KEY'], password=self.api_config['PRIVATE_KEY'])
+        self.digestauth = HTTPDigestAuth(username=self.api_config['PUBLIC_API_KEY'], password=self.api_config['PRIVATE_API_KEY'])
 
 
 class FetchMixin(MongoDBAPI):
@@ -149,7 +149,7 @@ class LogAPI(FetchMixin):
     def build_send_params(self):
         return {
             "extra_headers": {'X-Sumo-Name': self.filename},
-            "endpoint_key": "LOGS_SUMO_ENDPOINT"
+            "endpoint_key": "HTTP_LOGS_ENDPOINT"
         }
 
     def transform_data(self, content):
@@ -231,7 +231,7 @@ class ProcessMetricsAPI(FetchMixin):
     def build_send_params(self):
         return {
             "extra_headers": {'Content-Type': 'application/vnd.sumologic.carbon2'},
-            "endpoint_key": "METRICS_SUMO_ENDPOINT",
+            "endpoint_key": "HTTP_METRICS_ENDPOINT",
             "jsondump": False
         }
 
@@ -293,7 +293,7 @@ class DiskMetricsAPI(FetchMixin):
     def build_send_params(self):
         return {
             "extra_headers": {'Content-Type': 'application/vnd.sumologic.carbon2'},
-            "endpoint_key": "METRICS_SUMO_ENDPOINT",
+            "endpoint_key": "HTTP_METRICS_ENDPOINT",
             "jsondump": False
         }
 
@@ -354,7 +354,7 @@ class DatabaseMetricsAPI(FetchMixin):
     def build_send_params(self):
         return {
             "extra_headers": {'Content-Type': 'application/vnd.sumologic.carbon2'},
-            "endpoint_key": "METRICS_SUMO_ENDPOINT",
+            "endpoint_key": "HTTP_METRICS_ENDPOINT",
             "jsondump": False
         }
 
@@ -415,7 +415,7 @@ class ProjectEventsAPI(PaginatedFetchMixin):
     def build_send_params(self):
         return {
             "extra_headers": {'X-Sumo-Name': "events"},
-            "endpoint_key": "LOGS_SUMO_ENDPOINT"
+            "endpoint_key": "HTTP_LOGS_ENDPOINT"
         }
 
     def transform_data(self, data):
@@ -478,7 +478,7 @@ class OrgEventsAPI(PaginatedFetchMixin):
     def build_send_params(self):
         return {
             "extra_headers": {'X-Sumo-Name': "orgevents"},
-            "endpoint_key": "LOGS_SUMO_ENDPOINT"
+            "endpoint_key": "HTTP_LOGS_ENDPOINT"
         }
 
     def transform_data(self, data):
@@ -534,7 +534,7 @@ class AlertsAPI(MongoDBAPI):
     def build_send_params(self):
         return {
             "extra_headers": {'X-Sumo-Name': "alerts"},
-            "endpoint_key": "LOGS_SUMO_ENDPOINT"
+            "endpoint_key": "HTTP_LOGS_ENDPOINT"
         }
 
     def transform_data(self, data):

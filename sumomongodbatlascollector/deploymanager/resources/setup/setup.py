@@ -39,7 +39,7 @@ setup(
     license="PSF",
     long_description=long_description,
     long_description_content_type='text/markdown',
-    keywords="sumologic python rest api log management analytics $APPNAME_SMALL agent collector forwarder",
+    keywords="sumologic python rest api log management analytics $APPNAME_SINGLE agent collector forwarder",
     url="https://github.com/SumoLogic/$PACKAGENAME",
     zip_safe=True,
     include_package_data=True,

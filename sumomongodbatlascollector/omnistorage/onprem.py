@@ -144,6 +144,7 @@ class OnPremKVStorage(KeyValueStorage):
                 return True
             except IOError:
                 self.log.warning("Another instance is already running, quitting.")
+                self.log.debug("remove lock forcefully by removing %s" % lockfile)
                 return False
 
     def release_lock(self, key):
@@ -175,7 +176,7 @@ class OnPremKVStorage(KeyValueStorage):
         data = self.get(lock_key)
         if data and self.LOCK_DATE_KEY in data:
             now = time.time()
-            past = data[self.LOCK_DATE_COL]
+            past = data[self.LOCK_DATE_KEY]
             if (now - past) > expiry_min * 60:
                 self.log.debug(f'''Lock time expired key: {key} passed time: {(now-past)/60} min''')
                 self.release_lock(key)

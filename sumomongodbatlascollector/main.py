@@ -21,7 +21,7 @@ class MongoDBAtlasCollector(BaseCollector):
         self.project_dir = self.get_current_dir()
         super(MongoDBAtlasCollector, self).__init__(self.project_dir)
         self.api_config = self.config['MongoDBAtlas']
-        self.digestauth = HTTPDigestAuth(username=self.api_config['PUBLIC_KEY'], password=self.api_config['PRIVATE_KEY'])
+        self.digestauth = HTTPDigestAuth(username=self.api_config['PUBLIC_API_KEY'], password=self.api_config['PRIVATE_API_KEY'])
         self.mongosess = ClientMixin.get_new_session()
 
     def get_current_dir(self):
@@ -32,17 +32,15 @@ class MongoDBAtlasCollector(BaseCollector):
         page_num = 0
         all_data = []
 
-        try:
-            while True:
-                page_num += 1
-                status, data = ClientMixin.make_request(url, method="get", session=self.mongosess, TIMEOUT=60, logger=self.log, **kwargs)
-                if status and "results" in data and len(data['results']) > 0:
-                    all_data.append(data)
-                    kwargs['params']['pageNum'] = page_num + 1
-                else:
-                    break
-        finally:
-            sess.close()
+        while True:
+            page_num += 1
+            status, data = ClientMixin.make_request(url, method="get", session=self.mongosess, TIMEOUT=60, logger=self.log, **kwargs)
+            if status and "results" in data and len(data['results']) > 0:
+                all_data.append(data)
+                kwargs['params']['pageNum'] = page_num + 1
+            else:
+                break
+
         return all_data
 
     def _get_all_databases(self, process_ids):
@@ -205,6 +203,7 @@ class MongoDBAtlasCollector(BaseCollector):
                         self.log.info(f"API Type: {api_type} thread completed {obj}")
             finally:
                 self.stop_running()
+                self.mongosess.close()
         else:
             self.kvstore.release_lock_on_expired_key('is_running')
 

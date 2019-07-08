@@ -1,27 +1,27 @@
 AWSTemplateFormatVersion: '2010-09-09'
 Description: 'This solution consists of a lambda functions which is used to fetch
-  logs from MongoDBAtlas and ingest to Sumo Logic.
+  logs from MongoDB Atlas and ingest to Sumo Logic.
 
   '
 Outputs:
-  MongoDBAtlasSchedulerFunction:
+  MongoDBAtlasFunction:
     Description: MongoDBAtlasScheduler Function ARN
     Value:
       Fn::GetAtt:
-      - MongoDBAtlasSchedulerFunction
+      - MongoDBAtlasFunction
       - Arn
 Parameters:
-  HTTPLogsEndpoint:
+  HttpLogsEndpoint:
     Type: String
-  HTTPMetricsEndpoint:
+  HttpMetricsEndpoint:
     Type: String
-  OrganizationID:
+  OrganizationId:
     Type: String
-  ProjectID:
+  PrivateApiKey:
     Type: String
-  PrivateAPIKey:
+  ProjectId:
     Type: String
-  PublicAPIKey:
+  PublicApiKey:
     Type: String
 Resources:
   MongoDBAtlasFunction:
@@ -29,32 +29,28 @@ Resources:
       CodeUri: s3://appdevstore/MongoDBAtlas.zip
       Environment:
         Variables:
-          LOGS_SUMO_ENDPOINT:
-            Ref: HTTPLogsEndpoint
-          METRICS_SUMO_ENDPOINT:
-            Ref: HTTPMetricsEndpoint
+          ENVIRONMENT: aws
+          HTTP_LOGS_ENDPOINT:
+            Ref: HttpLogsEndpoint
+          HTTP_METRICS_ENDPOINT:
+            Ref: HttpMetricsEndpoint
           ORGANIZATION_ID:
-            Ref: OrganizationID
+            Ref: OrganizationId
+          PRIVATE_API_KEY:
+            Ref: PrivateApiKey
           PROJECT_ID:
-            Ref: ProjectID
-          PRIVATE_KEY:
-            Ref: PrivateAPIKey
-          PUBLIC_KEY:
-            Ref: PublicAPIKey
-          ENVIRONMENT: "aws"
+            Ref: ProjectId
+          PUBLIC_API_KEY:
+            Ref: PublicApiKey
       Events:
         ScheduleRule:
           Properties:
             Schedule: rate(5 minutes)
           Type: Schedule
       Handler: main.main
-#      Layers:
-#      - Fn::Sub: arn:aws:lambda:${AWS::Region}:956882708938:layer:securityhub_deps:1
       MemorySize: 256
       Policies:
-          - AmazonDynamoDBFullAccess
-#          - LambdaInvokePolicy:
-#              FunctionName: Ref: MongoDBAtlasSchedulerFunction
+      - AmazonDynamoDBFullAccess
       Runtime: python3.7
       Timeout: 300
     Type: AWS::Serverless::Function
