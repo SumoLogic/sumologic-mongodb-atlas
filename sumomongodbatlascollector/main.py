@@ -8,7 +8,7 @@ from requests.auth import HTTPDigestAuth
 
 from sumoappclient.sumoclient.base import BaseCollector
 from sumoappclient.sumoclient.httputils import ClientMixin
-from sumoappclient.sumoclient.utils import get_current_timestamp
+from sumoappclient.common.utils import get_current_timestamp
 from api import ProcessMetricsAPI, ProjectEventsAPI, OrgEventsAPI, DiskMetricsAPI, LogAPI, AlertsAPI, DatabaseMetricsAPI
 
 
@@ -22,7 +22,7 @@ class MongoDBAtlasCollector(BaseCollector):
         super(MongoDBAtlasCollector, self).__init__(self.project_dir)
         self.api_config = self.config['MongoDBAtlas']
         self.digestauth = HTTPDigestAuth(username=self.api_config['PUBLIC_API_KEY'], password=self.api_config['PRIVATE_API_KEY'])
-        self.mongosess = ClientMixin.get_new_session()
+        self.mongosess = ClientMixin.get_new_session(MAX_RETRY=self.collection_config['MAX_RETRY'], BACKOFF_FACTOR=self.collection_config['BACKOFF_FACTOR'])
 
     def get_current_dir(self):
         cur_dir = os.path.dirname(__file__)
@@ -34,7 +34,7 @@ class MongoDBAtlasCollector(BaseCollector):
 
         while True:
             page_num += 1
-            status, data = ClientMixin.make_request(url, method="get", session=self.mongosess, TIMEOUT=60, logger=self.log, **kwargs)
+            status, data = ClientMixin.make_request(url, method="get", session=self.mongosess, logger=self.log, TIMEOUT=self.collection_config['TIMEOUT'], MAX_RETRY=self.collection_config['MAX_RETRY'], BACKOFF_FACTOR=self.collection_config['BACKOFF_FACTOR'], **kwargs)
             if status and "results" in data and len(data['results']) > 0:
                 all_data.append(data)
                 kwargs['params']['pageNum'] = page_num + 1
@@ -205,7 +205,7 @@ class MongoDBAtlasCollector(BaseCollector):
                 self.stop_running()
                 self.mongosess.close()
         else:
-            self.kvstore.release_lock_on_expired_key('is_running')
+            self.kvstore.release_lock_on_expired_key('is_running', expiry_min=10)
 
     def test(self):
         if self.is_running():

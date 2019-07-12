@@ -107,11 +107,12 @@ MongoDBAtlas:
 Logging:
  LOG_FORMAT: "%(levelname)s | %(asctime)s | %(threadName)s | %(name)s | %(message)s"
  ROTATION_TYPE: D
- ROTATION_INTERVAL: 10
+ ROTATION_INTERVAL: 1
+ BACKUP_COUNT: 7
  ENABLE_CONSOLE_LOG: true
  ENABLE_LOGFILE: false
  LOG_FILEPATH: /tmp/mongodbatlascollector.log
- LOG_LEVEL: "DEBUG"
+ LOG_LEVEL: "INFO"
 
 Collection:
  ENVIRONMENT: onprem
@@ -123,8 +124,9 @@ Collection:
  COMPRESSED: true
  MAX_PAYLOAD_BYTESIZE: 500000
  END_TIME_EPOCH_OFFSET_SECONDS: 120
- BACKFILL_DAYS: 1
+ BACKFILL_DAYS: 0
  DBNAME: "mongodbatlas"
+ DB_DIR: ~/sumo
 
 DeployMetaData:
  PACKAGENAME: "sumologic-mongodb-atlas"

@@ -7,7 +7,7 @@ from requests.auth import HTTPDigestAuth
 
 from sumoappclient.sumoclient.base import BaseAPI
 from sumoappclient.sumoclient.factory import OutputHandlerFactory
-from sumoappclient.sumoclient.utils import get_current_timestamp, convert_epoch_to_utc_date, convert_utc_date_to_epoch, convert_date_to_epoch
+from sumoappclient.common.utils import get_current_timestamp, convert_epoch_to_utc_date, convert_utc_date_to_epoch, convert_date_to_epoch
 from sumoappclient.sumoclient.httputils import ClientMixin
 
 
@@ -22,31 +22,40 @@ class MongoDBAPI(BaseAPI):
         self.digestauth = HTTPDigestAuth(username=self.api_config['PUBLIC_API_KEY'], password=self.api_config['PRIVATE_API_KEY'])
 
 
+    def get_window(self, last_time_epoch):
+        start_time_epoch = last_time_epoch + self.MOVING_WINDOW_DELTA
+        end_time_epoch = get_current_timestamp() - self.collection_config['END_TIME_EPOCH_OFFSET_SECONDS']
+        if end_time_epoch < start_time_epoch:
+            # initially last_time_epoch is same as current_time_stamp so endtime becomes lesser than starttime
+            end_time_epoch = get_current_timestamp()
+        return start_time_epoch, end_time_epoch
+
 class FetchMixin(MongoDBAPI):
 
     def fetch(self):
-        log_type = self._get_key()
+        log_type = self.get_key()
         output_handler = OutputHandlerFactory.get_handler(self.collection_config['OUTPUT_HANDLER'], path=self.pathname, config=self.config)
         url, kwargs = self.build_fetch_params()
         self.log.info(f'''Fetching LogType: {log_type} kwargs: {kwargs}''')
         state = None
         try:
 
-            fetch_success, content = ClientMixin.make_request(url, method="get", logger=self.log, TIMEOUT=60, **kwargs)
+            fetch_success, content = ClientMixin.make_request(url, method="get", logger=self.log, TIMEOUT=self.collection_config['TIMEOUT'], MAX_RETRY=self.collection_config['MAX_RETRY'], BACKOFF_FACTOR=self.collection_config['BACKOFF_FACTOR'], **kwargs)
             if fetch_success and len(content) > 0:
                 payload, state = self.transform_data(content)
                 #Todo Make this atomic if after sending -> Ctrl - C happens then it fails to save state
                 send_success = output_handler.send(payload, **self.build_send_params())
                 if send_success:
                     self.save_state(**state)
-                    self.log.info(f'''Successfully sent LogType: {self._get_key()} Data: {len(content)}''')
+                    self.log.info(f'''Successfully sent LogType: {self.get_key()} Data: {len(content)}''')
                 else:
-                    self.log.error(f'''Failed to send LogType: {self._get_key()}''')
+                    self.log.error(f'''Failed to send LogType: {self.get_key()}''')
             else:
                 self.log.info(f'''No results status: {fetch_success} reason: {content}''')
         finally:
             output_handler.close()
             self.log.info(f'''Completed LogType: {log_type} curstate: {state}''')
+
 
 class PaginatedFetchMixin(MongoDBAPI):
 
@@ -54,7 +63,7 @@ class PaginatedFetchMixin(MongoDBAPI):
         current_state = self.get_state()
         output_handler = OutputHandlerFactory.get_handler(self.collection_config['OUTPUT_HANDLER'], path=self.pathname, config=self.config)
         url, kwargs = self.build_fetch_params()
-        log_type = self._get_key()
+        log_type = self.get_key()
         next_request = True
         count = 0
         sess = ClientMixin.get_new_session()
@@ -62,7 +71,7 @@ class PaginatedFetchMixin(MongoDBAPI):
         try:
             while next_request:
                 send_success = has_next_page = False
-                status, data = ClientMixin.make_request(url, method="get", session=sess, TIMEOUT=60, logger=self.log, **kwargs)
+                status, data = ClientMixin.make_request(url, method="get", session=sess, logger=self.log, TIMEOUT=self.collection_config['TIMEOUT'], MAX_RETRY=self.collection_config['MAX_RETRY'], BACKOFF_FACTOR=self.collection_config['BACKOFF_FACTOR'], **kwargs)
                 fetch_success = status and "results" in data
                 if fetch_success:
                     has_next_page = len(data['results']) > 0
@@ -120,25 +129,25 @@ class LogAPI(FetchMixin):
         self.hostname = hostname
         self.filename = filename
 
-    def _get_key(self):
+    def get_key(self):
         key = f'''{self.api_config['PROJECT_ID']}-{self.hostname}-{self.filename}'''
         return key
 
     def save_state(self, last_time_epoch):
-        key = self._get_key()
+        key = self.get_key()
         obj = {"last_time_epoch": last_time_epoch}
         self.kvstore.set(key, obj)
 
     def get_state(self):
-        key = self._get_key()
+        key = self.get_key()
         if not self.kvstore.has_key(key):
             self.save_state(self.DEFAULT_START_TIME_EPOCH)
         obj = self.kvstore.get(key)
         return obj
 
     def build_fetch_params(self):
-        start_time_epoch = self.get_state()['last_time_epoch']+self.MOVING_WINDOW_DELTA
-        end_time_epoch = get_current_timestamp() - self.collection_config['END_TIME_EPOCH_OFFSET_SECONDS']
+        start_time_epoch, end_time_epoch = self.get_window(self.get_state()['last_time_epoch'])
+
         return f'''{self.api_config['BASE_URL']}/groups/{self.api_config['PROJECT_ID']}/clusters/{self.hostname}/logs/{self.filename}''', {
                 "auth": self.digestauth,
                 "params": {"startDate": int(start_time_epoch), "endDate": int(end_time_epoch)}, # this api does not take ms
@@ -198,25 +207,24 @@ class ProcessMetricsAPI(FetchMixin):
         super(ProcessMetricsAPI, self).__init__(kvstore, config)
         self.process_id = process_id
 
-    def _get_key(self):
+    def get_key(self):
         key = f'''{self.api_config['PROJECT_ID']}-{self.process_id}'''
         return key
 
     def save_state(self, last_time_epoch):
-        key = self._get_key()
+        key = self.get_key()
         obj = {"last_time_epoch": last_time_epoch}
         self.kvstore.set(key, obj)
 
     def get_state(self):
-        key = self._get_key()
+        key = self.get_key()
         if not self.kvstore.has_key(key):
             self.save_state(self.DEFAULT_START_TIME_EPOCH)
         obj = self.kvstore.get(key)
         return obj
 
     def build_fetch_params(self):
-        start_time_epoch = self.get_state()['last_time_epoch']+self.MOVING_WINDOW_DELTA
-        end_time_epoch = get_current_timestamp() - self.collection_config['END_TIME_EPOCH_OFFSET_SECONDS']
+        start_time_epoch, end_time_epoch = self.get_window(self.get_state()['last_time_epoch'])
         start_time_date = convert_epoch_to_utc_date(start_time_epoch, date_format=self.isoformat)
         end_time_date = convert_epoch_to_utc_date(end_time_epoch, date_format=self.isoformat)
         return f'''{self.api_config['BASE_URL']}/groups/{self.api_config['PROJECT_ID']}/processes/{self.process_id}/measurements''', {
@@ -259,26 +267,25 @@ class DiskMetricsAPI(FetchMixin):
         self.process_id = process_id
         self.disk_name = disk_name
 
-    def _get_key(self):
+    def get_key(self):
         key = f'''{self.api_config['PROJECT_ID']}-{self.process_id}-{self.disk_name}'''
         return key
 
     def save_state(self, last_time_epoch):
-        key = self._get_key()
+        key = self.get_key()
         obj = {"last_time_epoch": last_time_epoch}
         self.kvstore.set(key, obj)
 
 
     def get_state(self):
-        key = self._get_key()
+        key = self.get_key()
         if not self.kvstore.has_key(key):
             self.save_state(self.DEFAULT_START_TIME_EPOCH)
         obj = self.kvstore.get(key)
         return obj
 
     def build_fetch_params(self):
-        start_time_epoch = self.get_state()['last_time_epoch']+self.MOVING_WINDOW_DELTA
-        end_time_epoch = get_current_timestamp() - self.collection_config['END_TIME_EPOCH_OFFSET_SECONDS']
+        start_time_epoch, end_time_epoch = self.get_window(self.get_state()['last_time_epoch'])
         start_time_date = convert_epoch_to_utc_date(start_time_epoch, date_format=self.isoformat)
         end_time_date = convert_epoch_to_utc_date(end_time_epoch, date_format=self.isoformat)
         return f'''{self.api_config['BASE_URL']}/groups/{self.api_config['PROJECT_ID']}/processes/{self.process_id}/disks/{self.disk_name}/measurements''', {
@@ -321,26 +328,25 @@ class DatabaseMetricsAPI(FetchMixin):
         self.process_id = process_id
         self.database_name = database_name
 
-    def _get_key(self):
+    def get_key(self):
         key = f'''{self.api_config['PROJECT_ID']}-{self.process_id}-{self.database_name}'''
         return key
 
     def save_state(self, last_time_epoch):
-        key = self._get_key()
+        key = self.get_key()
         obj = {"last_time_epoch": last_time_epoch}
         self.kvstore.set(key, obj)
 
 
     def get_state(self):
-        key = self._get_key()
+        key = self.get_key()
         if not self.kvstore.has_key(key):
             self.save_state(self.DEFAULT_START_TIME_EPOCH)
         obj = self.kvstore.get(key)
         return obj
 
     def build_fetch_params(self):
-        start_time_epoch = self.get_state()['last_time_epoch']+self.MOVING_WINDOW_DELTA
-        end_time_epoch = get_current_timestamp() - self.collection_config['END_TIME_EPOCH_OFFSET_SECONDS']
+        start_time_epoch, end_time_epoch = self.get_window(self.get_state()['last_time_epoch'])
         start_time_date = convert_epoch_to_utc_date(start_time_epoch, date_format=self.isoformat)
         end_time_date = convert_epoch_to_utc_date(end_time_epoch, date_format=self.isoformat)
         return f'''{self.api_config['BASE_URL']}/groups/{self.api_config['PROJECT_ID']}/processes/{self.process_id}/databases/{self.database_name}/measurements''', {
@@ -379,16 +385,16 @@ class ProjectEventsAPI(PaginatedFetchMixin):
     def __init__(self, kvstore, config):
         super(ProjectEventsAPI, self).__init__(kvstore, config)
 
-    def _get_key(self):
+    def get_key(self):
         key = f'''{self.api_config['PROJECT_ID']}-projectevents'''
         return key
 
     def save_state(self, state):
-        key = self._get_key()
+        key = self.get_key()
         self.kvstore.set(key, state)
 
     def get_state(self):
-        key = self._get_key()
+        key = self.get_key()
         if not self.kvstore.has_key(key):
             self.save_state({"last_time_epoch": self.DEFAULT_START_TIME_EPOCH, "page_num": 0})
         obj = self.kvstore.get(key)
@@ -397,8 +403,7 @@ class ProjectEventsAPI(PaginatedFetchMixin):
     def build_fetch_params(self):
         state = self.get_state()
         if state["page_num"] == 0:
-            start_time_epoch = state['last_time_epoch'] + self.MOVING_WINDOW_DELTA
-            end_time_epoch = get_current_timestamp() - self.collection_config['END_TIME_EPOCH_OFFSET_SECONDS']
+            start_time_epoch, end_time_epoch = self.get_window(state['last_time_epoch'])
             page_num = 1
         else:
             start_time_epoch = state['start_time_epoch']
@@ -439,18 +444,18 @@ class OrgEventsAPI(PaginatedFetchMixin):
     def __init__(self, kvstore, config):
         super(OrgEventsAPI, self).__init__(kvstore, config)
 
-    def _get_key(self):
+    def get_key(self):
         key = f'''{self.api_config['ORGANIZATION_ID']}-orgevents'''
         return key
 
 
     def save_state(self, state):
-        key = self._get_key()
+        key = self.get_key()
         self.kvstore.set(key, state)
 
 
     def get_state(self):
-        key = self._get_key()
+        key = self.get_key()
         if not self.kvstore.has_key(key):
             self.save_state({"last_time_epoch": self.DEFAULT_START_TIME_EPOCH, "page_num": 0})
         obj = self.kvstore.get(key)
@@ -460,8 +465,7 @@ class OrgEventsAPI(PaginatedFetchMixin):
     def build_fetch_params(self):
         state = self.get_state()
         if state["page_num"] == 0:
-            start_time_epoch = state['last_time_epoch'] + self.MOVING_WINDOW_DELTA
-            end_time_epoch = get_current_timestamp() - self.collection_config['END_TIME_EPOCH_OFFSET_SECONDS']
+            start_time_epoch, end_time_epoch = self.get_window(state['last_time_epoch'])
             page_num = 1
         else:
             start_time_epoch = state['start_time_epoch']
@@ -504,16 +508,16 @@ class AlertsAPI(MongoDBAPI):
     def __init__(self, kvstore, config):
         super(AlertsAPI, self).__init__(kvstore, config)
 
-    def _get_key(self):
+    def get_key(self):
         key = f'''{self.api_config['PROJECT_ID']}-alerts'''
         return key
 
     def save_state(self, state):
-        key = self._get_key()
+        key = self.get_key()
         self.kvstore.set(key, state)
 
     def get_state(self):
-        key = self._get_key()
+        key = self.get_key()
         if not self.kvstore.has_key(key):
             self.save_state({"page_num": 0, "last_page_offset": 0})
         obj = self.kvstore.get(key)
@@ -555,13 +559,13 @@ class AlertsAPI(MongoDBAPI):
         url, kwargs = self.build_fetch_params()
         next_request = True
         sess = ClientMixin.get_new_session()
-        log_type = self._get_key()
+        log_type = self.get_key()
         count = 0
         self.log.info(f'''Fetching LogType: {log_type} pageNum: {kwargs["params"]["pageNum"]}''')
         try:
             while next_request:
                 send_success = has_next_page = False
-                status, data = ClientMixin.make_request(url, method="get", session=sess, logger=self.log, TIMEOUT=60, **kwargs)
+                status, data = ClientMixin.make_request(url, method="get", session=sess, logger=self.log, TIMEOUT=self.collection_config['TIMEOUT'], MAX_RETRY=self.collection_config['MAX_RETRY'], BACKOFF_FACTOR=self.collection_config['BACKOFF_FACTOR'], **kwargs)
                 fetch_success = status and "results" in data
                 if fetch_success:
                     has_next_page = len(data['results']) > 0
