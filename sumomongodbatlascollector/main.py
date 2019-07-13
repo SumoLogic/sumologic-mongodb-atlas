@@ -13,7 +13,7 @@ from api import ProcessMetricsAPI, ProjectEventsAPI, OrgEventsAPI, DiskMetricsAP
 
 
 class MongoDBAtlasCollector(BaseCollector):
-
+    SINGLE_PROCESS_LOCK_KEY = 'is_mongodbatlascollector_running'
     CONFIG_FILENAME = "mongodbatlas.yaml"
     DATA_REFRESH_TIME = 60*60*1000
 
@@ -127,11 +127,11 @@ class MongoDBAtlasCollector(BaseCollector):
 
     def is_running(self):
         self.log.debug("Acquiring single instance lock")
-        return self.kvstore.acquire_lock('is_running')
+        return self.kvstore.acquire_lock(self.SINGLE_PROCESS_LOCK_KEY)
 
     def stop_running(self):
         self.log.debug("Releasing single instance lock")
-        return self.kvstore.release_lock('is_running')
+        return self.kvstore.release_lock(self.SINGLE_PROCESS_LOCK_KEY)
 
     def build_task_params(self):
 

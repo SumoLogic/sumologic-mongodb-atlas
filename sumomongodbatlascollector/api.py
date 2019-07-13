@@ -80,7 +80,7 @@ class PaginatedFetchMixin(MongoDBAPI):
                         send_success = output_handler.send(payload, **self.build_send_params())
                         if send_success:
                             count +=1
-                            self.log.debug(f'''Fetching LogType: {log_type} Page: {kwargs['params']['pageNum']}  Datalen: {len(payload)} starttime: {kwargs['params']['minDate']} endtime: {kwargs['params']['maxDate']}''')
+                            self.log.debug(f'''Successfully sent LogType: {log_type} Page: {kwargs['params']['pageNum']}  Datalen: {len(payload)} starttime: {kwargs['params']['minDate']} endtime: {kwargs['params']['maxDate']}''')
                             kwargs['params']['pageNum'] += 1
                             # save and update last_time_epoch required for next invocation
                             current_state.update(updated_state)
