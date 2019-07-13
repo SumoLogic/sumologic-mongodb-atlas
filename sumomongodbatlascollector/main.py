@@ -205,7 +205,7 @@ class MongoDBAtlasCollector(BaseCollector):
                 self.stop_running()
                 self.mongosess.close()
         else:
-            self.kvstore.release_lock_on_expired_key('is_running', expiry_min=10)
+            self.kvstore.release_lock_on_expired_key(self.SINGLE_PROCESS_LOCK_KEY, expiry_min=10)
 
     def test(self):
         if self.is_running():
