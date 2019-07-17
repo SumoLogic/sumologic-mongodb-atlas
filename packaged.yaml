@@ -18,7 +18,7 @@ Metadata:
     LicenseUrl: s3://appdevstore/5122657d5b9a0d3713e24d3a33eae431
     Name: sumologic-mongodb-atlas
     ReadmeUrl: s3://appdevstore/5866849a98131c58cb7edb85893d4414
-    SemanticVersion: 1.0.6
+    SemanticVersion: 1.0.7
     SourceCodeUrl: https://github.com/SumoLogic/sumologic-mongodb-atlas
     SpdxLicenseId: Apache-2.0
 Outputs:
@@ -44,7 +44,7 @@ Parameters:
 Resources:
   MongoDBAtlasFunction:
     Properties:
-      CodeUri: s3://appdevstore/f83c9a998d752dab3c18db0ffa408a70
+      CodeUri: s3://appdevstore/d69c929ac836abc613096a668272a8a8
       Environment:
         Variables:
           ENVIRONMENT: aws
@@ -70,6 +70,6 @@ Resources:
       Policies:
       - AmazonDynamoDBFullAccess
       Runtime: python3.7
-      Timeout: 300
+      Timeout: 1500
     Type: AWS::Serverless::Function
 Transform: AWS::Serverless-2016-10-31

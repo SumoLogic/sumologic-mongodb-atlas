@@ -18,7 +18,7 @@ Metadata:
     LicenseUrl: ./LICENSE
     Name: sumologic-mongodb-atlas
     ReadmeUrl: ./README.md
-    SemanticVersion: 1.0.6
+    SemanticVersion: 1.0.7
     SourceCodeUrl: https://github.com/SumoLogic/sumologic-mongodb-atlas
     SpdxLicenseId: Apache-2.0
 Outputs:
@@ -70,6 +70,6 @@ Resources:
       Policies:
       - AmazonDynamoDBFullAccess
       Runtime: python3.7
-      Timeout: 300
+      Timeout: 1500
     Type: AWS::Serverless::Function
 Transform: AWS::Serverless-2016-10-31
