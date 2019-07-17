@@ -44,7 +44,7 @@ Parameters:
 Resources:
   MongoDBAtlasFunction:
     Properties:
-      CodeUri: s3://appdevstore/d69c929ac836abc613096a668272a8a8
+      CodeUri: s3://appdevstore/1193bef2079ce08f4b771401aef889d4
       Environment:
         Variables:
           ENVIRONMENT: aws
@@ -70,6 +70,6 @@ Resources:
       Policies:
       - AmazonDynamoDBFullAccess
       Runtime: python3.7
-      Timeout: 1500
+      Timeout: 900
     Type: AWS::Serverless::Function
 Transform: AWS::Serverless-2016-10-31

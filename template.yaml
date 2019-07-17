@@ -70,6 +70,6 @@ Resources:
       Policies:
       - AmazonDynamoDBFullAccess
       Runtime: python3.7
-      Timeout: 1500
+      Timeout: 900
     Type: AWS::Serverless::Function
 Transform: AWS::Serverless-2016-10-31
