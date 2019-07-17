@@ -37,18 +37,18 @@ This collector can be deployed both onprem and on cloud.
 
     ```
         SumoLogic:
-         LOGS_SUMO_ENDPOINT: <Paste the URL for the HTTP Logs source from step 2.>
-         METRICS_SUMO_ENDPOINT: <Paste the URL for the HTTP Metrics source from step 2.>
+         HTTP_LOGS_ENDPOINT: <Paste the URL for the HTTP Logs source from step 2.>
+         HTTP_METRICS_ENDPOINT: <Paste the URL for the HTTP Metrics source from step 2.>
 
         MongoDBAtlas:
          ORGANIZATION_ID: Paste the Organization ID from step 1.
          PROJECT_ID: Paste the Project ID from step 1.
-         PRIVATE_KEY: Paste the Private Key from step 1.
-         PUBLIC_KEY: Paste the Public Key from step 1.
+         PRIVATE_API_KEY: Paste the Private Key from step 1.
+         PUBLIC_API_KEY: Paste the Public Key from step 1.
     ```
     * Create a cron job  for running the collector every 5 minutes by using the crontab -e and adding the below line
 
-        `*/5 * * * *  /usr/bin/python -m sumogsuitealertscollector.main > /dev/null 2>&1`
+        `*/5 * * * *  /usr/bin/python -m sumomongodbatlascollector.main > /dev/null 2>&1`
 
    Method 2 - Collection via an AWS Lambda function
    To install Sumo Logic’s AWS Lambda script, follow the instructions below:

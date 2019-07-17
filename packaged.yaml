@@ -15,9 +15,9 @@ Metadata:
     - atlas
     - serverless
     - MongoDBAtlas
-    LicenseUrl: ./LICENSE
+    LicenseUrl: s3://appdevstore/5122657d5b9a0d3713e24d3a33eae431
     Name: sumologic-mongodb-atlas
-    ReadmeUrl: ./README.md
+    ReadmeUrl: s3://appdevstore/5866849a98131c58cb7edb85893d4414
     SemanticVersion: 1.0.6
     SourceCodeUrl: https://github.com/SumoLogic/sumologic-mongodb-atlas
     SpdxLicenseId: Apache-2.0
@@ -44,7 +44,7 @@ Parameters:
 Resources:
   MongoDBAtlasFunction:
     Properties:
-      CodeUri: ./target/aws/build/
+      CodeUri: s3://appdevstore/f83c9a998d752dab3c18db0ffa408a70
       Environment:
         Variables:
           ENVIRONMENT: aws
