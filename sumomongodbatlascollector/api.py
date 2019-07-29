@@ -38,6 +38,7 @@ class FetchMixin(MongoDBAPI):
         url, kwargs = self.build_fetch_params()
         self.log.info(f'''Fetching LogType: {log_type} kwargs: {kwargs}''')
         state = None
+        payload = []
         try:
 
             fetch_success, content = ClientMixin.make_request(url, method="get", logger=self.log, TIMEOUT=self.collection_config['TIMEOUT'], MAX_RETRY=self.collection_config['MAX_RETRY'], BACKOFF_FACTOR=self.collection_config['BACKOFF_FACTOR'], **kwargs)
@@ -54,7 +55,7 @@ class FetchMixin(MongoDBAPI):
                 self.log.info(f'''No results status: {fetch_success} reason: {content}''')
         finally:
             output_handler.close()
-            self.log.info(f'''Completed LogType: {log_type} curstate: {state}''')
+            self.log.info(f'''Completed LogType: {log_type} curstate: {state} datasent: {len(payload)}''')
 
 
 class PaginatedFetchMixin(MongoDBAPI):
