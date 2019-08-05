@@ -21,7 +21,6 @@ class MongoDBAPI(BaseAPI):
         self.api_config = self.config['MongoDBAtlas']
         self.digestauth = HTTPDigestAuth(username=self.api_config['PUBLIC_API_KEY'], password=self.api_config['PRIVATE_API_KEY'])
 
-
     def get_window(self, last_time_epoch):
         start_time_epoch = last_time_epoch + self.MOVING_WINDOW_DELTA
         end_time_epoch = get_current_timestamp() - self.collection_config['END_TIME_EPOCH_OFFSET_SECONDS']
@@ -45,7 +44,8 @@ class FetchMixin(MongoDBAPI):
             if fetch_success and len(content) > 0:
                 payload, state = self.transform_data(content)
                 #Todo Make this atomic if after sending -> Ctrl - C happens then it fails to save state
-                send_success = output_handler.send(payload, **self.build_send_params())
+                params = self.build_send_params()
+                send_success = output_handler.send(payload, **params)
                 if send_success:
                     self.save_state(**state)
                     self.log.info(f'''Successfully sent LogType: {self.get_key()} Data: {len(content)}''')
@@ -78,7 +78,8 @@ class PaginatedFetchMixin(MongoDBAPI):
                     has_next_page = len(data['results']) > 0
                     if has_next_page:
                         payload, updated_state = self.transform_data(data)
-                        send_success = output_handler.send(payload, **self.build_send_params())
+                        params = self.build_send_params()
+                        send_success = output_handler.send(payload, **params)
                         if send_success:
                             count +=1
                             self.log.debug(f'''Successfully sent LogType: {log_type} Page: {kwargs['params']['pageNum']}  Datalen: {len(payload)} starttime: {kwargs['params']['minDate']} endtime: {kwargs['params']['maxDate']}''')
@@ -123,12 +124,12 @@ class PaginatedFetchMixin(MongoDBAPI):
 class LogAPI(FetchMixin):
     # single API
     MOVING_WINDOW_DELTA = 1  # This api does not take ms
-    pathname = "db_logs.json"
 
     def __init__(self, kvstore, hostname, filename, config):
         super(LogAPI, self).__init__(kvstore, config)
         self.hostname = hostname
         self.filename = filename
+        self.pathname = "db_logs.json" if "audit" not in self.filename else "db_auditlogs.json"
 
     def get_key(self):
         key = f'''{self.api_config['PROJECT_ID']}-{self.hostname}-{self.filename}'''
@@ -169,17 +170,23 @@ class LogAPI(FetchMixin):
         all_logs = []
         last_time_epoch = self.DEFAULT_START_TIME_EPOCH
         results = gzip.GzipFile(fileobj=BytesIO(content))
-        for line in results.readlines():
+        for line_no, line in enumerate(results.readlines()):
             if not line.strip():
                 # for JSONDecoderror in case of empty lines
                 continue
             if "audit" in self.filename:
-                msg = json.loads(line.decode('utf-8'))
+                try:
+                    msg = json.loads(line.decode('utf-8'))
+                except:
+                    if len(all_logs) > 0:
+                        # for multiline messages
+                        all_logs[-1]['msg'] += msg['msg']
+                    self.log.error("Error in line no: %d last_log: %s current_log: %s" % (line_no, all_logs[-1:], line))
+                    continue
                 msg['project_id'] = self.api_config['PROJECT_ID']
                 msg['hostname'] = self.hostname
                 msg['cluster_name'] = self.hostname.split("-", 1)[0].strip()
                 current_date = msg['ts']['$date']
-
             else:
                 msg = {
                     'msg': line.decode('utf-8').strip(),
@@ -188,14 +195,10 @@ class LogAPI(FetchMixin):
                     'cluster_name': self.hostname.split("-", 1)[0].strip()
                 }
                 current_date = msg['msg'].split(" ", 1)[0]
-
-            try:
-                current_timestamp = convert_date_to_epoch(current_date.strip())
-                msg['created'] = current_date # taking out date
-                last_time_epoch = max(current_timestamp, last_time_epoch)
-                all_logs.append(msg)
-            except ValueError:
-                all_logs[-1]['msg'] += msg['msg']
+            current_timestamp = convert_date_to_epoch(current_date.strip())
+            msg['created'] = current_date  # taking out date
+            last_time_epoch = max(current_timestamp, last_time_epoch)
+            all_logs.append(msg)
 
         return all_logs, {"last_time_epoch": last_time_epoch}
 
