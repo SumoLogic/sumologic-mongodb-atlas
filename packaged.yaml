@@ -18,7 +18,7 @@ Metadata:
     LicenseUrl: s3://appdevstore/5122657d5b9a0d3713e24d3a33eae431
     Name: sumologic-mongodb-atlas
     ReadmeUrl: s3://appdevstore/5866849a98131c58cb7edb85893d4414
-    SemanticVersion: 1.0.8
+    SemanticVersion: 1.0.9
     SourceCodeUrl: https://github.com/SumoLogic/sumologic-mongodb-atlas
     SpdxLicenseId: Apache-2.0
 Outputs:
@@ -44,7 +44,7 @@ Parameters:
 Resources:
   MongoDBAtlasFunction:
     Properties:
-      CodeUri: s3://appdevstore/e6e6365cac3dc116a69390440b1d6c24
+      CodeUri: s3://appdevstore/a3b4a12dbae12e696467806f8328e926
       Environment:
         Variables:
           ENVIRONMENT: aws
