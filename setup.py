@@ -26,8 +26,6 @@ setup(
     packages=find_packages(),
     install_requires=INSTALL_REQUIRES,
     extras_require={
-        ':python_version < "3.2"': ['futures'],
-        ':python_version < "3.6"': ['future-fstrings'],
         'aws': ["boto3>=1.9.66", "botocore>=1.12.66"],
         "gcp": ["google-api-python-client>=1.7.8", "oauth2client>=4.1.3", "google-cloud-datastore>=1.7.3"],
         "azure": ["azure-cosmosdb-table>=1.0.5", "bson>=0.5.8"]

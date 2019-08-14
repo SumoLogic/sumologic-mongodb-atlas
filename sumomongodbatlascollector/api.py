@@ -280,7 +280,6 @@ class DiskMetricsAPI(FetchMixin):
         obj = {"last_time_epoch": last_time_epoch}
         self.kvstore.set(key, obj)
 
-
     def get_state(self):
         key = self.get_key()
         if not self.kvstore.has_key(key):
