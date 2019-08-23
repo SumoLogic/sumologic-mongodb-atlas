@@ -1,0 +1,5 @@
+include requirements.txt
+include LICENSE
+include VERSION
+include README
+include sumomongodbatlascollector/mongodbatlas.yaml

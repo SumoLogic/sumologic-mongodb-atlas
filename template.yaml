@@ -1,0 +1,75 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'This solution consists of a lambda functions which is used to fetch
+  logs from MongoDB Atlas and ingest to Sumo Logic.
+
+  '
+Metadata:
+  AWS::ServerlessRepo::Application:
+    Author: Sumo Logic
+    Description: This solution consists of a lambda functions which is used to fetch
+      logs from MongoDB Atlas and ingest to Sumo Logic.
+    HomePageUrl: https://github.com/SumoLogic/sumologic-mongodb-atlas
+    Labels:
+    - lambda
+    - sumologic
+    - atlas
+    - serverless
+    - MongoDBAtlas
+    LicenseUrl: ./LICENSE
+    Name: sumologic-mongodb-atlas
+    ReadmeUrl: ./README.md
+    SemanticVersion: 1.0.9
+    SourceCodeUrl: https://github.com/SumoLogic/sumologic-mongodb-atlas
+    SpdxLicenseId: Apache-2.0
+Outputs:
+  MongoDBAtlasFunction:
+    Description: MongoDBAtlasScheduler Function ARN
+    Value:
+      Fn::GetAtt:
+      - MongoDBAtlasFunction
+      - Arn
+Parameters:
+  HttpLogsEndpoint:
+    Type: String
+  HttpMetricsEndpoint:
+    Type: String
+  OrganizationId:
+    Type: String
+  PrivateApiKey:
+    Type: String
+  ProjectId:
+    Type: String
+  PublicApiKey:
+    Type: String
+Resources:
+  MongoDBAtlasFunction:
+    Properties:
+      CodeUri: ./target/aws/build/
+      Environment:
+        Variables:
+          ENVIRONMENT: aws
+          HTTP_LOGS_ENDPOINT:
+            Ref: HttpLogsEndpoint
+          HTTP_METRICS_ENDPOINT:
+            Ref: HttpMetricsEndpoint
+          ORGANIZATION_ID:
+            Ref: OrganizationId
+          PRIVATE_API_KEY:
+            Ref: PrivateApiKey
+          PROJECT_ID:
+            Ref: ProjectId
+          PUBLIC_API_KEY:
+            Ref: PublicApiKey
+      Events:
+        ScheduleRule:
+          Properties:
+            Schedule: rate(5 minutes)
+          Type: Schedule
+      Handler: main.main
+      MemorySize: 256
+      Policies:
+      - AmazonDynamoDBFullAccess
+      Runtime: python3.7
+      Timeout: 900
+    Type: AWS::Serverless::Function
+Transform: AWS::Serverless-2016-10-31
