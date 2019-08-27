@@ -116,7 +116,7 @@ class MongoDBAtlasCollector(BaseCollector):
         if not self.kvstore.has_key('processes'):
             self._set_processes()
 
-        current_timestamp = get_current_timestamp()
+        current_timestamp = get_current_timestamp(milliseconds=True)
         processes = self.kvstore.get('processes')
         if current_timestamp - processes['last_set_date'] > self.DATA_REFRESH_TIME or (len(processes['process_ids']) == 0):
             self._set_processes()
