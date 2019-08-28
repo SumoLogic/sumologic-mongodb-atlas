@@ -11,7 +11,6 @@ MongoDBAtlas:
   - AUDIT
   - EVENTS_PROJECT
   - EVENTS_ORG
-  - ALERTS
  METRIC_TYPES:
   PROCESS_METRICS:
    - CACHE_DIRTY_BYTES
@@ -132,6 +131,7 @@ DeployMetaData:
  PACKAGENAME: "sumologic-mongodb-atlas"
  APPNAME: "MongoDB Atlas"
  SRC_FOLDER_NAME: "sumomongodbatlascollector"
+ ENABLE_LAYER: false
 
 SumoLogic:
  HTTP_LOGS_ENDPOINT: null
