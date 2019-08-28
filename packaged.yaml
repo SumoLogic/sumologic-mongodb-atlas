@@ -15,10 +15,10 @@ Metadata:
     - atlas
     - serverless
     - MongoDBAtlas
-    LicenseUrl: s3://appdevstore/MongoDBAtlas/5122657d5b9a0d3713e24d3a33eae431
+    LicenseUrl: s3://appdevstore/MongoDBAtlas/v1.0.12/5122657d5b9a0d3713e24d3a33eae431
     Name: sumologic-mongodb-atlas
-    ReadmeUrl: s3://appdevstore/MongoDBAtlas/5866849a98131c58cb7edb85893d4414
-    SemanticVersion: 1.0.11
+    ReadmeUrl: s3://appdevstore/MongoDBAtlas/v1.0.12/5866849a98131c58cb7edb85893d4414
+    SemanticVersion: 1.0.12
     SourceCodeUrl: https://github.com/SumoLogic/sumologic-mongodb-atlas
     SpdxLicenseId: Apache-2.0
 Outputs:
@@ -44,7 +44,7 @@ Parameters:
 Resources:
   MongoDBAtlasFunction:
     Properties:
-      CodeUri: s3://appdevstore/MongoDBAtlas/a2d31b9a502c293755077896bd54cc20
+      CodeUri: s3://appdevstore/MongoDBAtlas/v1.0.12/d00a1771096f7fc72aedce1c866a336b
       Environment:
         Variables:
           ENVIRONMENT: aws
