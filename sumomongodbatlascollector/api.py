@@ -114,6 +114,12 @@ class PaginatedFetchMixin(MongoDBAPI):
                                 "last_time_epoch": current_state['last_time_epoch'] + self.MOVING_WINDOW_DELTA
                             })
                 else:
+                    self.save_state({
+                        "start_time_epoch": convert_utc_date_to_epoch(kwargs['params']['minDate']),
+                        "end_time_epoch": convert_utc_date_to_epoch(kwargs['params']['maxDate']),
+                        "page_num": kwargs['params']["pageNum"],
+                        "last_time_epoch": current_state['last_time_epoch']
+                    })
                     self.log.error(f'''Failed to fetch LogType: {log_type} Page: {kwargs['params']['pageNum']} Reason: {data} starttime: {kwargs['params']['minDate']} endtime: {kwargs['params']['maxDate']}''')
                 next_request = fetch_success and send_success and has_next_page and self.is_time_remaining()
         finally:
@@ -130,6 +136,7 @@ class LogAPI(FetchMixin):
         self.hostname = hostname
         self.filename = filename
         self.pathname = "db_logs.json" if "audit" not in self.filename else "db_auditlogs.json"
+        self.hostname_mapping = self.kvstore.get("hostname_mapping", {}).get("values", {})
 
     def get_key(self):
         key = f'''{self.api_config['PROJECT_ID']}-{self.hostname}-{self.filename}'''
@@ -174,6 +181,7 @@ class LogAPI(FetchMixin):
             if not line.strip():
                 # for JSONDecoderror in case of empty lines
                 continue
+            host_name_alias = self.hostname_mapping.get(self.hostname, self.hostname)
             if "audit" in self.filename:
                 try:
                     msg = json.loads(line.decode('utf-8'))
@@ -185,14 +193,15 @@ class LogAPI(FetchMixin):
                     continue
                 msg['project_id'] = self.api_config['PROJECT_ID']
                 msg['hostname'] = self.hostname
-                msg['cluster_name'] = self.hostname.split("-", 1)[0].strip()
+
+                msg['cluster_name'] = host_name_alias.split("-", 1)[0].strip()
                 current_date = msg['ts']['$date']
             else:
                 msg = {
                     'msg': line.decode('utf-8').strip(),
                     'project_id': self.api_config['PROJECT_ID'],
                     'hostname': self.hostname,
-                    'cluster_name': self.hostname.split("-", 1)[0].strip()
+                    'cluster_name': host_name_alias.split("-", 1)[0].strip()
                 }
                 current_date = msg['msg'].split(" ", 1)[0]
             current_timestamp = convert_date_to_epoch(current_date.strip())
@@ -210,6 +219,7 @@ class ProcessMetricsAPI(FetchMixin):
     def __init__(self, kvstore, process_id, config):
         super(ProcessMetricsAPI, self).__init__(kvstore, config)
         self.process_id = process_id
+        self.hostname_mapping = self.kvstore.get("hostname_mapping", {}).get("values", {})
 
     def get_key(self):
         key = f'''{self.api_config['PROJECT_ID']}-{self.process_id}'''
@@ -255,7 +265,8 @@ class ProcessMetricsAPI(FetchMixin):
                 if datapoints['value'] is None:
                     continue
                 current_timestamp = convert_utc_date_to_epoch(datapoints['timestamp'], date_format=self.date_format)
-                cluster_name = data['hostId'].split("-", 1)[0].strip()
+                host_name_alias = self.hostname_mapping.get(data['hostId'], data['hostId'])
+                cluster_name = host_name_alias.split("-", 1)[0].strip()
                 metrics.append(f'''projectId={data['groupId']} hostId={data['hostId']} processId={data['processId']} metric={measurement['name']}  units={measurement['units']} cluster_name={cluster_name} {datapoints['value']} {current_timestamp}''')
                 last_time_epoch = max(current_timestamp, last_time_epoch)
         return metrics, {"last_time_epoch": last_time_epoch}
@@ -270,6 +281,7 @@ class DiskMetricsAPI(FetchMixin):
         super(DiskMetricsAPI, self).__init__(kvstore, config)
         self.process_id = process_id
         self.disk_name = disk_name
+        self.hostname_mapping = self.kvstore.get("hostname_mapping", {}).get("values", {})
 
     def get_key(self):
         key = f'''{self.api_config['PROJECT_ID']}-{self.process_id}-{self.disk_name}'''
@@ -315,7 +327,8 @@ class DiskMetricsAPI(FetchMixin):
                 if datapoints['value'] is None:
                     continue
                 current_timestamp = convert_utc_date_to_epoch(datapoints['timestamp'], date_format=self.date_format)
-                cluster_name = data['hostId'].split("-", 1)[0].strip()
+                host_name_alias = self.hostname_mapping.get(data['hostId'], data['hostId'])
+                cluster_name = host_name_alias.split("-", 1)[0].strip()
                 metrics.append(f'''projectId={data['groupId']} partitionName={data['partitionName']} hostId={data['hostId']} processId={data['processId']} metric={measurement['name']}  units={measurement['units']} cluster_name={cluster_name} {datapoints['value']} {current_timestamp}''')
                 last_time_epoch = max(current_timestamp, last_time_epoch)
         return metrics, {"last_time_epoch": last_time_epoch}
@@ -330,6 +343,7 @@ class DatabaseMetricsAPI(FetchMixin):
         super(DatabaseMetricsAPI, self).__init__(kvstore, config)
         self.process_id = process_id
         self.database_name = database_name
+        self.hostname_mapping = self.kvstore.get("hostname_mapping", {}).get("values", {})
 
     def get_key(self):
         key = f'''{self.api_config['PROJECT_ID']}-{self.process_id}-{self.database_name}'''
@@ -375,7 +389,8 @@ class DatabaseMetricsAPI(FetchMixin):
                 if datapoints['value'] is None:
                     continue
                 current_timestamp = convert_utc_date_to_epoch(datapoints['timestamp'], date_format=self.date_format)
-                cluster_name = data['hostId'].split("-", 1)[0].strip()
+                host_name_alias = self.hostname_mapping.get(data['hostId'], data['hostId'])
+                cluster_name = host_name_alias.split("-", 1)[0].strip()
                 metrics.append(f'''projectId={data['groupId']} databaseName={data['databaseName']} hostId={data['hostId']} processId={data['processId']} metric={measurement['name']}  units={measurement['units']} cluster_name={cluster_name} {datapoints['value']} {current_timestamp}''')
                 last_time_epoch = max(current_timestamp, last_time_epoch)
         return metrics, {"last_time_epoch": last_time_epoch}

@@ -59,9 +59,9 @@ class MongoDBAtlasCollector(BaseCollector):
         process_ids = [obj['id'] for data in all_data for obj in data['results']]
         hostnames = [obj['hostname'] for data in all_data for obj in data['results']]
         # 'port': 27017, 'replicaSetName': 'M10AWSTestCluster-config-0', 'typeName': 'SHARD_CONFIG_PRIMARY'
-
+        hostname_mapping = {obj['hostname']: obj['userAlias'] for data in all_data for obj in data['results']}
         hostnames = list(set(hostnames))
-        return process_ids, hostnames
+        return process_ids, hostnames, hostname_mapping
 
     def _get_all_disks_from_host(self, process_ids):
         disks = []
@@ -77,8 +77,9 @@ class MongoDBAtlasCollector(BaseCollector):
         self.kvstore.set("database_names", {"last_set_date": get_current_timestamp(milliseconds=True), "values": database_names})
 
     def _set_processes(self):
-        process_ids, hostnames = self._get_all_processes_from_project()
+        process_ids, hostnames, hostname_mapping = self._get_all_processes_from_project()
         self.kvstore.set("processes", {"last_set_date": get_current_timestamp(milliseconds=True), "process_ids": process_ids, "hostnames": hostnames})
+        self.kvstore.set("hostname_mapping", {"last_set_date": get_current_timestamp(milliseconds=True), "values": database_names})
 
     def _set_disk_names(self, process_ids):
         disks = self._get_all_disks_from_host(process_ids)
