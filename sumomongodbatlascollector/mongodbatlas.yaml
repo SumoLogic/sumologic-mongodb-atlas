@@ -109,7 +109,7 @@ Logging:
  ROTATION_INTERVAL: 1
  BACKUP_COUNT: 7
  ENABLE_CONSOLE_LOG: true
- ENABLE_LOGFILE: true
+ ENABLE_LOGFILE: false
  LOG_FILEPATH: /tmp/mongodbatlascollector.log
  LOG_LEVEL: "INFO"
 
