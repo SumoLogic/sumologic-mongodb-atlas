@@ -15,10 +15,10 @@ Metadata:
     - atlas
     - serverless
     - MongoDBAtlas
-    LicenseUrl: s3://appdevstore/MongoDBAtlas/v1.0.14/5122657d5b9a0d3713e24d3a33eae431
+    LicenseUrl: s3://appdevstore/MongoDBAtlas/v1.0.15/5122657d5b9a0d3713e24d3a33eae431
     Name: sumologic-mongodb-atlas
-    ReadmeUrl: s3://appdevstore/MongoDBAtlas/v1.0.14/5866849a98131c58cb7edb85893d4414
-    SemanticVersion: 1.0.14
+    ReadmeUrl: s3://appdevstore/MongoDBAtlas/v1.0.15/5866849a98131c58cb7edb85893d4414
+    SemanticVersion: 1.0.15
     SourceCodeUrl: https://github.com/SumoLogic/sumologic-mongodb-atlas
     SpdxLicenseId: Apache-2.0
 Outputs:
@@ -44,9 +44,10 @@ Parameters:
 Resources:
   MongoDBAtlasFunction:
     Properties:
-      CodeUri: s3://appdevstore/MongoDBAtlas/v1.0.14/836e5b198f009fc9afd7881139187e96
+      CodeUri: s3://appdevstore/MongoDBAtlas/v1.0.15/60d2a1994510235d0222728d75fe810f
       Environment:
         Variables:
+          ENABLE_CONSOLE_LOG: 'false'
           ENVIRONMENT: aws
           HTTP_LOGS_ENDPOINT:
             Ref: HttpLogsEndpoint
@@ -63,7 +64,7 @@ Resources:
       Events:
         ScheduleRule:
           Properties:
-            Schedule: rate(5 minutes)
+            Schedule: rate(10 minutes)
           Type: Schedule
       Handler: main.main
       MemorySize: 256

@@ -454,7 +454,7 @@ class ProjectEventsAPI(PaginatedFetchMixin):
         else:
             start_time_epoch = state['start_time_epoch']
             end_time_epoch = state['end_time_epoch']
-            page_num = state['pageNum']
+            page_num = state['page_num']
 
         start_time_date = convert_epoch_to_utc_date(start_time_epoch, date_format=self.isoformat)
         end_time_date = convert_epoch_to_utc_date(end_time_epoch, date_format=self.isoformat)
@@ -516,7 +516,7 @@ class OrgEventsAPI(PaginatedFetchMixin):
         else:
             start_time_epoch = state['start_time_epoch']
             end_time_epoch = state['end_time_epoch']
-            page_num = state['pageNum']
+            page_num = state['page_num']
 
         start_time_date = convert_epoch_to_utc_date(start_time_epoch, date_format=self.isoformat)
         end_time_date = convert_epoch_to_utc_date(end_time_epoch, date_format=self.isoformat)
