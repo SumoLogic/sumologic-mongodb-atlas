@@ -13,6 +13,9 @@ from api import ProcessMetricsAPI, ProjectEventsAPI, OrgEventsAPI, DiskMetricsAP
 
 
 class MongoDBAtlasCollector(BaseCollector):
+    '''
+        Design Doc: https://docs.google.com/document/d/15TgilyyuGTMjRIZUXVJa1UhpTu3wS-gMl-dDsXAV2gw/edit?usp=sharing
+    '''
     SINGLE_PROCESS_LOCK_KEY = 'is_mongodbatlascollector_running'
     CONFIG_FILENAME = "mongodbatlas.yaml"
     DATA_REFRESH_TIME = 60*60*1000

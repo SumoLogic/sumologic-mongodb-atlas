@@ -25,9 +25,10 @@ class MongoDBAPI(BaseAPI):
     def get_window(self, last_time_epoch):
         start_time_epoch = last_time_epoch + self.MOVING_WINDOW_DELTA
         end_time_epoch = get_current_timestamp() - self.collection_config['END_TIME_EPOCH_OFFSET_SECONDS']
-        while not (end_time_epoch - start_time_epoch > 60):
+        MIN_REQUEST_WINDOW_LENGTH = 60
+        while not (end_time_epoch - start_time_epoch > MIN_REQUEST_WINDOW_LENGTH):
             # initially last_time_epoch is same as current_time_stamp so endtime becomes lesser than starttime
-            time.sleep(60)
+            time.sleep(MIN_REQUEST_WINDOW_LENGTH)
             end_time_epoch = get_current_timestamp() - self.collection_config['END_TIME_EPOCH_OFFSET_SECONDS']
         return start_time_epoch, end_time_epoch
 
