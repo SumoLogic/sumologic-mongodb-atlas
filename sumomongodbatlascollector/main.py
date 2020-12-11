@@ -13,6 +13,9 @@ from api import ProcessMetricsAPI, ProjectEventsAPI, OrgEventsAPI, DiskMetricsAP
 
 
 class MongoDBAtlasCollector(BaseCollector):
+    '''
+        Design Doc: https://docs.google.com/document/d/15TgilyyuGTMjRIZUXVJa1UhpTu3wS-gMl-dDsXAV2gw/edit?usp=sharing
+    '''
     SINGLE_PROCESS_LOCK_KEY = 'is_mongodbatlascollector_running'
     CONFIG_FILENAME = "mongodbatlas.yaml"
     DATA_REFRESH_TIME = 60*60*1000
@@ -52,6 +55,9 @@ class MongoDBAtlasCollector(BaseCollector):
             database_names.extend([obj['databaseName'] for data in all_data for obj in data['results']])
         return list(set(database_names))
 
+    def _get_cluster_name(self, fullname):
+        return fullname.split("-shard")[0]
+
     def _get_all_processes_from_project(self):
         url = f"{self.api_config['BASE_URL']}/groups/{self.api_config['PROJECT_ID']}/processes"
         kwargs = {'auth': self.digestauth, "params": {"itemsPerPage": self.api_config['PAGINATION_LIMIT']}}
@@ -59,9 +65,9 @@ class MongoDBAtlasCollector(BaseCollector):
         process_ids = [obj['id'] for data in all_data for obj in data['results']]
         hostnames = [obj['hostname'] for data in all_data for obj in data['results']]
         # 'port': 27017, 'replicaSetName': 'M10AWSTestCluster-config-0', 'typeName': 'SHARD_CONFIG_PRIMARY'
-
+        cluster_mapping = {self._get_cluster_name(obj['hostname']): self._get_cluster_name(obj['userAlias']) for data in all_data for obj in data['results']}
         hostnames = list(set(hostnames))
-        return process_ids, hostnames
+        return process_ids, hostnames, cluster_mapping
 
     def _get_all_disks_from_host(self, process_ids):
         disks = []
@@ -77,8 +83,9 @@ class MongoDBAtlasCollector(BaseCollector):
         self.kvstore.set("database_names", {"last_set_date": get_current_timestamp(milliseconds=True), "values": database_names})
 
     def _set_processes(self):
-        process_ids, hostnames = self._get_all_processes_from_project()
+        process_ids, hostnames, cluster_mapping = self._get_all_processes_from_project()
         self.kvstore.set("processes", {"last_set_date": get_current_timestamp(milliseconds=True), "process_ids": process_ids, "hostnames": hostnames})
+        self.kvstore.set("cluster_mapping", {"last_set_date": get_current_timestamp(milliseconds=True), "values": cluster_mapping})
 
     def _set_disk_names(self, process_ids):
         disks = self._get_all_disks_from_host(process_ids)
@@ -140,6 +147,7 @@ class MongoDBAtlasCollector(BaseCollector):
         filenames = []
         tasks = []
         process_ids, hostnames = self._get_process_names()
+        cluster_mapping = self.kvstore.get("cluster_mapping", {}).get("values", {})
 
         if 'LOG_TYPES' in self.api_config:
             if "DATABASE" in self.api_config['LOG_TYPES']:
@@ -149,7 +157,7 @@ class MongoDBAtlasCollector(BaseCollector):
 
             for filename in filenames:
                 for hostname in hostnames:
-                    tasks.append(LogAPI(self.kvstore, hostname, filename, self.config))
+                    tasks.append(LogAPI(self.kvstore, hostname, filename, self.config, cluster_mapping))
 
             if "EVENTS_PROJECT" in self.api_config['LOG_TYPES']:
                 tasks.append(ProjectEventsAPI(self.kvstore, self.config))
@@ -161,21 +169,21 @@ class MongoDBAtlasCollector(BaseCollector):
                 tasks.append(AlertsAPI(self.kvstore, self.config))
 
         if 'METRIC_TYPES' in self.api_config:
-            if "PROCESS_METRICS" in self.api_config['METRIC_TYPES']:
+            if self.api_config['METRIC_TYPES'].get("PROCESS_METRICS", []):
                 for process_id in process_ids:
-                    tasks.append(ProcessMetricsAPI(self.kvstore, process_id, self.config))
+                    tasks.append(ProcessMetricsAPI(self.kvstore, process_id, self.config, cluster_mapping))
 
-            if "DISK_METRICS" in self.api_config['METRIC_TYPES']:
+            if self.api_config['METRIC_TYPES'].get("DISK_METRICS", []):
                 disk_names = self._get_disk_names()
                 for process_id in process_ids:
                     for disk_name in disk_names:
-                        tasks.append(DiskMetricsAPI(self.kvstore, process_id, disk_name, self.config))
+                        tasks.append(DiskMetricsAPI(self.kvstore, process_id, disk_name, self.config, cluster_mapping))
 
-            if "DATABASE_METRICS" in self.api_config['METRIC_TYPES']:
+            if self.api_config['METRIC_TYPES'].get("DATABASE_METRICS", []):
                 database_names = self._get_database_names()
                 for process_id in process_ids:
                     for database_name in database_names:
-                        tasks.append(DatabaseMetricsAPI(self.kvstore, process_id, database_name, self.config))
+                        tasks.append(DatabaseMetricsAPI(self.kvstore, process_id, database_name, self.config, cluster_mapping))
 
         self.log.info("%d Tasks Generated" % len(tasks))
         return tasks
@@ -212,6 +220,7 @@ class MongoDBAtlasCollector(BaseCollector):
         if self.is_running():
             task_params = self.build_task_params()
             shuffle(task_params)
+            # print(task_params)
             try:
                 for apiobj in task_params:
                     apiobj.fetch()

@@ -18,7 +18,7 @@ Metadata:
     LicenseUrl: ./LICENSE
     Name: sumologic-mongodb-atlas
     ReadmeUrl: ./README.md
-    SemanticVersion: 1.0.13
+    SemanticVersion: 1.0.15
     SourceCodeUrl: https://github.com/SumoLogic/sumologic-mongodb-atlas
     SpdxLicenseId: Apache-2.0
 Outputs:
@@ -47,6 +47,7 @@ Resources:
       CodeUri: ./target/aws/build/
       Environment:
         Variables:
+          ENABLE_CONSOLE_LOG: 'false'
           ENVIRONMENT: aws
           HTTP_LOGS_ENDPOINT:
             Ref: HttpLogsEndpoint
@@ -63,7 +64,7 @@ Resources:
       Events:
         ScheduleRule:
           Properties:
-            Schedule: rate(5 minutes)
+            Schedule: rate(10 minutes)
           Type: Schedule
       Handler: main.main
       MemorySize: 256

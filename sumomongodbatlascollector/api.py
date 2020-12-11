@@ -3,8 +3,9 @@
 import gzip
 import json
 from io import BytesIO
+import time
 from requests.auth import HTTPDigestAuth
-
+import dateutil
 from sumoappclient.sumoclient.base import BaseAPI
 from sumoappclient.sumoclient.factory import OutputHandlerFactory
 from sumoappclient.common.utils import get_current_timestamp, convert_epoch_to_utc_date, convert_utc_date_to_epoch, convert_date_to_epoch
@@ -24,10 +25,21 @@ class MongoDBAPI(BaseAPI):
     def get_window(self, last_time_epoch):
         start_time_epoch = last_time_epoch + self.MOVING_WINDOW_DELTA
         end_time_epoch = get_current_timestamp() - self.collection_config['END_TIME_EPOCH_OFFSET_SECONDS']
-        if end_time_epoch < start_time_epoch:
+        MIN_REQUEST_WINDOW_LENGTH = 60
+        while not (end_time_epoch - start_time_epoch > MIN_REQUEST_WINDOW_LENGTH):
             # initially last_time_epoch is same as current_time_stamp so endtime becomes lesser than starttime
-            end_time_epoch = get_current_timestamp()
+            time.sleep(MIN_REQUEST_WINDOW_LENGTH)
+            end_time_epoch = get_current_timestamp() - self.collection_config['END_TIME_EPOCH_OFFSET_SECONDS']
         return start_time_epoch, end_time_epoch
+
+    def _get_cluster_name(self, full_name_with_cluster):
+        return full_name_with_cluster.split("-shard")[0]
+
+    def _replace_cluster_name(self, full_name_with_cluster, cluster_mapping):
+        cluster_name = self._get_cluster_name(full_name_with_cluster)
+        cluster_alias = cluster_mapping.get(cluster_name, cluster_name)
+        return full_name_with_cluster.replace(cluster_name, cluster_alias)
+
 
 class FetchMixin(MongoDBAPI):
 
@@ -114,6 +126,12 @@ class PaginatedFetchMixin(MongoDBAPI):
                                 "last_time_epoch": current_state['last_time_epoch'] + self.MOVING_WINDOW_DELTA
                             })
                 else:
+                    self.save_state({
+                        "start_time_epoch": convert_utc_date_to_epoch(kwargs['params']['minDate']),
+                        "end_time_epoch": convert_utc_date_to_epoch(kwargs['params']['maxDate']),
+                        "page_num": kwargs['params']["pageNum"],
+                        "last_time_epoch": current_state['last_time_epoch']
+                    })
                     self.log.error(f'''Failed to fetch LogType: {log_type} Page: {kwargs['params']['pageNum']} Reason: {data} starttime: {kwargs['params']['minDate']} endtime: {kwargs['params']['maxDate']}''')
                 next_request = fetch_success and send_success and has_next_page and self.is_time_remaining()
         finally:
@@ -125,11 +143,12 @@ class LogAPI(FetchMixin):
     # single API
     MOVING_WINDOW_DELTA = 1  # This api does not take ms
 
-    def __init__(self, kvstore, hostname, filename, config):
+    def __init__(self, kvstore, hostname, filename, config, cluster_mapping):
         super(LogAPI, self).__init__(kvstore, config)
         self.hostname = hostname
         self.filename = filename
         self.pathname = "db_logs.json" if "audit" not in self.filename else "db_auditlogs.json"
+        self.cluster_mapping = cluster_mapping
 
     def get_key(self):
         key = f'''{self.api_config['PROJECT_ID']}-{self.hostname}-{self.filename}'''
@@ -170,31 +189,48 @@ class LogAPI(FetchMixin):
         all_logs = []
         last_time_epoch = self.DEFAULT_START_TIME_EPOCH
         results = gzip.GzipFile(fileobj=BytesIO(content))
+        last_line = ""
         for line_no, line in enumerate(results.readlines()):
             if not line.strip():
                 # for JSONDecoderror in case of empty lines
                 continue
+            line = line.decode('utf-8')
+            hostname_alias = self._replace_cluster_name(self.hostname, self.cluster_mapping)
+            cluster_name = self._get_cluster_name(hostname_alias)
+
             if "audit" in self.filename:
+                if last_line:
+                    line = last_line + line
                 try:
-                    msg = json.loads(line.decode('utf-8'))
-                except:
-                    if len(all_logs) > 0:
-                        # for multiline messages
-                        all_logs[-1]['msg'] += msg['msg']
-                    self.log.error("Error in line no: %d last_log: %s current_log: %s" % (line_no, all_logs[-1:], line))
+                    msg = json.loads(line)
+                    last_line = ""
+                except ValueError as e:
+                    # checking for multiline messages
+                    last_line = line
+                    self.log.warn("Multiline Message in line no: %d last_log: %s current_log: %s" % (line_no, all_logs[-1:], line))
                     continue
                 msg['project_id'] = self.api_config['PROJECT_ID']
-                msg['hostname'] = self.hostname
-                msg['cluster_name'] = self.hostname.split("-", 1)[0].strip()
+                msg['hostname'] = hostname_alias
+                msg['cluster_name'] = cluster_name
                 current_date = msg['ts']['$date']
             else:
                 msg = {
-                    'msg': line.decode('utf-8').strip(),
+                    'msg': line,
                     'project_id': self.api_config['PROJECT_ID'],
-                    'hostname': self.hostname,
-                    'cluster_name': self.hostname.split("-", 1)[0].strip()
+                    'hostname': hostname_alias,
+                    'cluster_name': cluster_name
                 }
-                current_date = msg['msg'].split(" ", 1)[0]
+                current_date = line.split(" ", 1)[0]
+
+                try:
+                    # checking for multiline messages
+                    dateutil.parser.parse(current_date)
+                except ValueError as e:
+                    if len(all_logs) > 0:
+                        all_logs[-1]['msg'] += msg['msg']
+                    self.log.warn("Multiline Message in line no: %d last_log: %s current_log: %s" % (line_no, all_logs[-1:], line))
+                    continue
+
             current_timestamp = convert_date_to_epoch(current_date.strip())
             msg['created'] = current_date  # taking out date
             last_time_epoch = max(current_timestamp, last_time_epoch)
@@ -207,9 +243,10 @@ class ProcessMetricsAPI(FetchMixin):
 
     pathname = "process_metrics.log"
 
-    def __init__(self, kvstore, process_id, config):
+    def __init__(self, kvstore, process_id, config, cluster_mapping):
         super(ProcessMetricsAPI, self).__init__(kvstore, config)
         self.process_id = process_id
+        self.cluster_mapping = cluster_mapping
 
     def get_key(self):
         key = f'''{self.api_config['PROJECT_ID']}-{self.process_id}'''
@@ -236,7 +273,7 @@ class ProcessMetricsAPI(FetchMixin):
                 "params": {
                     "itemsPerPage": self.api_config['PAGINATION_LIMIT'], "granularity": "PT1M",
                     "start": start_time_date, "end": end_time_date
-                    # , "m": self.api_config["METRIC_TYPES"]["PROCESS_METRICS"]
+                    ,"m": self.api_config["METRIC_TYPES"]["PROCESS_METRICS"]
                 }
         }
 
@@ -255,8 +292,10 @@ class ProcessMetricsAPI(FetchMixin):
                 if datapoints['value'] is None:
                     continue
                 current_timestamp = convert_utc_date_to_epoch(datapoints['timestamp'], date_format=self.date_format)
-                cluster_name = data['hostId'].split("-", 1)[0].strip()
-                metrics.append(f'''projectId={data['groupId']} hostId={data['hostId']} processId={data['processId']} metric={measurement['name']}  units={measurement['units']} cluster_name={cluster_name} {datapoints['value']} {current_timestamp}''')
+                host_id = self._replace_cluster_name(data['hostId'], self.cluster_mapping)
+                process_id = self._replace_cluster_name(data['processId'], self.cluster_mapping)
+                cluster_name = self._get_cluster_name(host_id)
+                metrics.append(f'''projectId={data['groupId']} hostId={host_id} processId={process_id} metric={measurement['name']}  units={measurement['units']} cluster_name={cluster_name} {datapoints['value']} {current_timestamp}''')
                 last_time_epoch = max(current_timestamp, last_time_epoch)
         return metrics, {"last_time_epoch": last_time_epoch}
 
@@ -266,10 +305,11 @@ class DiskMetricsAPI(FetchMixin):
     date_format = '%Y-%m-%dT%H:%M:%SZ'
     pathname = "disk_metrics.log"
 
-    def __init__(self, kvstore, process_id, disk_name, config):
+    def __init__(self, kvstore, process_id, disk_name, config, cluster_mapping):
         super(DiskMetricsAPI, self).__init__(kvstore, config)
         self.process_id = process_id
         self.disk_name = disk_name
+        self.cluster_mapping = cluster_mapping
 
     def get_key(self):
         key = f'''{self.api_config['PROJECT_ID']}-{self.process_id}-{self.disk_name}'''
@@ -296,7 +336,7 @@ class DiskMetricsAPI(FetchMixin):
             "params": {
                 "itemsPerPage": self.api_config['PAGINATION_LIMIT'], "granularity": "PT1M",
                 "start": start_time_date, "end": end_time_date
-                #"m": self.api_config["METRIC_TYPES"]["DISK_METRICS"]
+                ,"m": self.api_config["METRIC_TYPES"]["DISK_METRICS"]
             }
         }
 
@@ -315,8 +355,10 @@ class DiskMetricsAPI(FetchMixin):
                 if datapoints['value'] is None:
                     continue
                 current_timestamp = convert_utc_date_to_epoch(datapoints['timestamp'], date_format=self.date_format)
-                cluster_name = data['hostId'].split("-", 1)[0].strip()
-                metrics.append(f'''projectId={data['groupId']} partitionName={data['partitionName']} hostId={data['hostId']} processId={data['processId']} metric={measurement['name']}  units={measurement['units']} cluster_name={cluster_name} {datapoints['value']} {current_timestamp}''')
+                host_id = self._replace_cluster_name(data['hostId'], self.cluster_mapping)
+                process_id = self._replace_cluster_name(data['processId'], self.cluster_mapping)
+                cluster_name = self._get_cluster_name(host_id)
+                metrics.append(f'''projectId={data['groupId']} partitionName={data['partitionName']} hostId={host_id} processId={process_id} metric={measurement['name']}  units={measurement['units']} cluster_name={cluster_name} {datapoints['value']} {current_timestamp}''')
                 last_time_epoch = max(current_timestamp, last_time_epoch)
         return metrics, {"last_time_epoch": last_time_epoch}
 
@@ -326,10 +368,11 @@ class DatabaseMetricsAPI(FetchMixin):
     date_format = '%Y-%m-%dT%H:%M:%SZ'
     pathname = "database_metrics.log"
 
-    def __init__(self, kvstore, process_id, database_name, config):
+    def __init__(self, kvstore, process_id, database_name, config, cluster_mapping):
         super(DatabaseMetricsAPI, self).__init__(kvstore, config)
         self.process_id = process_id
         self.database_name = database_name
+        self.cluster_mapping = cluster_mapping
 
     def get_key(self):
         key = f'''{self.api_config['PROJECT_ID']}-{self.process_id}-{self.database_name}'''
@@ -356,7 +399,7 @@ class DatabaseMetricsAPI(FetchMixin):
             "auth": self.digestauth,
             "params": {"itemsPerPage": self.api_config['PAGINATION_LIMIT'], "granularity": "PT1M",
                        "start": start_time_date, "end": end_time_date
-                        # ,  "m": self.api_config["METRIC_TYPES"]["DATABASE_METRICS"]
+                        ,"m": self.api_config["METRIC_TYPES"]["DATABASE_METRICS"]
             }
         }
 
@@ -375,8 +418,9 @@ class DatabaseMetricsAPI(FetchMixin):
                 if datapoints['value'] is None:
                     continue
                 current_timestamp = convert_utc_date_to_epoch(datapoints['timestamp'], date_format=self.date_format)
-                cluster_name = data['hostId'].split("-", 1)[0].strip()
-                metrics.append(f'''projectId={data['groupId']} databaseName={data['databaseName']} hostId={data['hostId']} processId={data['processId']} metric={measurement['name']}  units={measurement['units']} cluster_name={cluster_name} {datapoints['value']} {current_timestamp}''')
+                process_id = self._replace_cluster_name(data['processId'], self.cluster_mapping)
+                cluster_name = self._get_cluster_name(process_id)
+                metrics.append(f'''projectId={data['groupId']} databaseName={data['databaseName']} hostId={data['hostId']} processId={process_id} metric={measurement['name']}  units={measurement['units']} cluster_name={cluster_name} {datapoints['value']} {current_timestamp}''')
                 last_time_epoch = max(current_timestamp, last_time_epoch)
         return metrics, {"last_time_epoch": last_time_epoch}
 
@@ -411,7 +455,7 @@ class ProjectEventsAPI(PaginatedFetchMixin):
         else:
             start_time_epoch = state['start_time_epoch']
             end_time_epoch = state['end_time_epoch']
-            page_num = state['pageNum']
+            page_num = state['page_num']
 
         start_time_date = convert_epoch_to_utc_date(start_time_epoch, date_format=self.isoformat)
         end_time_date = convert_epoch_to_utc_date(end_time_epoch, date_format=self.isoformat)
@@ -473,7 +517,7 @@ class OrgEventsAPI(PaginatedFetchMixin):
         else:
             start_time_epoch = state['start_time_epoch']
             end_time_epoch = state['end_time_epoch']
-            page_num = state['pageNum']
+            page_num = state['page_num']
 
         start_time_date = convert_epoch_to_utc_date(start_time_epoch, date_format=self.isoformat)
         end_time_date = convert_epoch_to_utc_date(end_time_epoch, date_format=self.isoformat)
