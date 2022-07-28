@@ -214,22 +214,20 @@ class LogAPI(FetchMixin):
                 msg['cluster_name'] = cluster_name
                 current_date = msg['ts']['$date']
             else:
-                msg = {
-                    'msg': line,
-                    'project_id': self.api_config['PROJECT_ID'],
-                    'hostname': hostname_alias,
-                    'cluster_name': cluster_name
-                }
-                current_date = line.split(" ", 1)[0]
-
+                if last_line:
+                    line = last_line + line
                 try:
-                    # checking for multiline messages
-                    dateutil.parser.parse(current_date)
+                    msg = json.loads(line)
+                    last_line = ""
                 except ValueError as e:
-                    if len(all_logs) > 0:
-                        all_logs[-1]['msg'] += msg['msg']
+                    # checking for multiline messages
+                    last_line = line
                     self.log.warn("Multiline Message in line no: %d last_log: %s current_log: %s" % (line_no, all_logs[-1:], line))
                     continue
+                msg['project_id'] = self.api_config['PROJECT_ID']
+                msg['hostname'] = hostname_alias
+                msg['cluster_name'] = cluster_name
+                current_date = msg['t']['$date']
 
             current_timestamp = convert_date_to_epoch(current_date.strip())
             msg['created'] = current_date  # taking out date
@@ -656,4 +654,3 @@ class AlertsAPI(MongoDBAPI):
         finally:
             sess.close()
             self.log.info(f'''Completed LogType: {log_type} Count: {count} Page: {kwargs['params']['pageNum']}''')
-
