@@ -73,4 +73,6 @@ Resources:
       Runtime: python3.7
       Timeout: 900
     Type: AWS::Serverless::Function
+    Metadata:
+      SamResourceId: MongoDBAtlasFunction
 Transform: AWS::Serverless-2016-10-31
