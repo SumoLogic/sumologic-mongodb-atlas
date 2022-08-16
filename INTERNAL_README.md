@@ -26,14 +26,17 @@ Deployment testing for PyPi:
 Deployment testing for AWS:
 1.  For testing of this package, we perform these steps:
     * Update .aws file to use a personal aws account credentials
-    * Create a S3 bucket named 'appdevstore' in the personal aws account
+    * Create a S3 bucket in the personal aws account
+    * Set two environment variables:
+        * export SAM_S3_BUCKET = 'name of the S3 Bucket created'
+        * export AWS_REGION = 'region of the deployment'
     * Upgrade the SemanticVersion in the template.yaml file, eg 1.0.16 -> 1.0.17
     * Run the following command:
         ```
         sumoappclient -d test -c mongodbatlas.yaml -e aws
         ```
     * This deploys the package via a personal aws account onto AWS Serverless Application Repository
-2.  For onprem pypi production deployment, we perform these steps:
+2.  For production deployment, we perform these steps:
     * Update .aws file to use sumocontent aws account credentials
     * Upgrade the SemanticVersion in the template.yaml file, eg 1.0.16 -> 1.0.17
     * Run the following command:
