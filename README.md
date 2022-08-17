@@ -68,4 +68,16 @@ Search for “sumologic-mongodb-atlas” and select the app as shown below:
         * Private API Key: Paste the Private Key from step 1.
         * Public API Key: Paste the Public Key from step 1.
     * Click Deploy.
-
+    * Whitelisting Lambda's IP Address
+        * Search for Lambda in the AWS console, select Functions tab and open the function just created.
+        * Go to the Configuration>Permissions tab of the function>click on the Execution role name link to open up the IAM window containing all the permission policies.
+        * Click on Add permissions>Create inline policy. Choose JSON and copy this policy statement:
+        ```
+        { "Version": "2012-10-17", "Statement": [ { "Effect": "Allow", "Action": [ "ec2:DescribeNetworkInterfaces", "ec2:CreateNetworkInterface", "ec2:DeleteNetworkInterface", "ec2:DescribeInstances", "ec2:AttachNetworkInterface" ], "Resource": "*" } ] }
+        ```
+        Click on Review policy>give an appropriate name>click on Create policy.
+        Some users might already have these permissions enabled.
+        * We then [follow these steps](https://docs.aws.amazon.com/prescriptive-guidance/latest/patterns/generate-a-static-outbound-ip-address-using-a-lambda-function-amazon-vpc-and-a-serverless-architecture.html) to create elastic ip/ips for the lambda function and add a vpc to our function. We note down the elastic ips.
+        * We go to the mongo console>click on Organization Access>Access Manager>API Keys>click on ‘...’ of the API Key used above>Edit Permissions.
+        * Click Next>Add Access List Entry>Enter the elastic ips noted above and save>Done.
+        * The lambda function should be working now in sending logs to Sumo. You can check the cloudwatch logs in Monitor>Logs to see the logs of the function.
