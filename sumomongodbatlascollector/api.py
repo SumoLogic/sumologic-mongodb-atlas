@@ -26,10 +26,16 @@ class MongoDBAPI(BaseAPI):
         start_time_epoch = last_time_epoch + self.MOVING_WINDOW_DELTA
         end_time_epoch = get_current_timestamp() - self.collection_config['END_TIME_EPOCH_OFFSET_SECONDS']
         MIN_REQUEST_WINDOW_LENGTH = 60
+        MAX_REQUEST_WINDOW_LENGTH = 3600
+
         while not (end_time_epoch - start_time_epoch > MIN_REQUEST_WINDOW_LENGTH):
             # initially last_time_epoch is same as current_time_stamp so endtime becomes lesser than starttime
             time.sleep(MIN_REQUEST_WINDOW_LENGTH)
             end_time_epoch = get_current_timestamp() - self.collection_config['END_TIME_EPOCH_OFFSET_SECONDS']
+
+        if ((end_time_epoch - start_time_epoch) > MAX_REQUEST_WINDOW_LENGTH):
+            end_time_epoch = start_time_epoch + MAX_REQUEST_WINDOW_LENGTH
+
         return start_time_epoch, end_time_epoch
 
     def _get_cluster_name(self, full_name_with_cluster):
@@ -63,8 +69,14 @@ class FetchMixin(MongoDBAPI):
                     self.log.info(f'''Successfully sent LogType: {self.get_key()} Data: {len(content)}''')
                 else:
                     self.log.error(f'''Failed to send LogType: {self.get_key()}''')
+            elif fetch_success and len(content) == 0:
+                self.log.info(f'''No results window LogType: {log_type} kwargs: {kwargs} status: {fetch_success}''')
+                is_move_fetch_window, new_state = self.check_move_fetch_window(kwargs)
+                if is_move_fetch_window:
+                    self.save_state(**new_state)
+                    self.log.debug(f'''Moving fetched window newstate: {new_state}''')
             else:
-                self.log.info(f'''No results status: {fetch_success} reason: {content}''')
+                self.log.error(f'''Error LogType: {log_type} status: {fetch_success} reason: {content}''')
         finally:
             output_handler.close()
             self.log.info(f'''Completed LogType: {log_type} curstate: {state} datasent: {len(payload)}''')
@@ -116,15 +128,27 @@ class PaginatedFetchMixin(MongoDBAPI):
                                 "last_time_epoch": current_state['last_time_epoch']
                             })
                     else:
-                        self.log.debug(f'''Moving starttime window LogType: {log_type} Page: {kwargs['params']['pageNum']} starttime: {kwargs['params']['minDate']} endtime: {kwargs['params']['maxDate']}''')
-                        # here fetch success is false and assuming pageNum starts from 1
-                        # genuine no result window no change
-                        # page_num has finished increase window calc last_time_epoch  and add 1
+
+                        # here fetch success is true and assuming pageNum starts from 1
+                        # page_num has finished increase window calc last_time_epoch
                         if kwargs['params']['pageNum'] > 1:
+                            self.log.debug(f'''Moving starttime window LogType: {log_type} Page: {kwargs['params']['pageNum']} starttime: {kwargs['params']['minDate']} endtime: {kwargs['params']['maxDate']} to last_time_epoch": {convert_epoch_to_utc_date(current_state['last_time_epoch'], date_format=self.isoformat)}''')
                             self.save_state({
                                 "page_num": 0,
-                                "last_time_epoch": current_state['last_time_epoch'] + self.MOVING_WINDOW_DELTA
+                                "last_time_epoch": current_state['last_time_epoch']
                             })
+                        else:
+                            # genuine no result window no change
+                            self.log.info(f'''No results window LogType: {log_type} Page: {kwargs['params']['pageNum']} starttime: {kwargs['params']['minDate']} endtime: {kwargs['params']['maxDate']} status: {fetch_success}''')
+                            is_move_fetch_window, updated_state = self.check_move_fetch_window(kwargs)
+                            if is_move_fetch_window:
+                                current_state.update(updated_state)
+                                self.log.debug(f'''Moving starttime window LogType: {log_type} Page: {kwargs['params']['pageNum']} starttime: {kwargs['params']['minDate']} endtime: {kwargs['params']['maxDate']} to last_time_epoch": {convert_epoch_to_utc_date(current_state['last_time_epoch'], date_format=self.isoformat)}''')
+                                self.save_state({
+                                    "page_num": 0,
+                                    "last_time_epoch": current_state['last_time_epoch']
+                                })
+
                 else:
                     self.save_state({
                         "start_time_epoch": convert_utc_date_to_epoch(kwargs['params']['minDate']),
@@ -182,6 +206,16 @@ class LogAPI(FetchMixin):
             "endpoint_key": "HTTP_LOGS_ENDPOINT"
         }
 
+    def check_move_fetch_window(self, kwargs):
+        # https://www.mongodb.com/docs/atlas/reference/api/logs/
+        # Process and audit logs are updated from the cluster backend infrastructure every five minutes and contain log data from the previous five minutes.
+        data_availablity_max_endDate = int(get_current_timestamp() - 5*60)
+        api_endDate = kwargs['params']["endDate"]
+        if api_endDate < data_availablity_max_endDate:
+            return True, {"last_time_epoch": api_endDate}
+        else:
+            return False, {}
+
     def transform_data(self, content):
         # assuming file content is small so inmemory possible
         # https://stackoverflow.com/questions/11914472/stringio-in-python3
@@ -229,9 +263,9 @@ class LogAPI(FetchMixin):
                 msg['cluster_name'] = cluster_name
                 current_date = msg['t']['$date']
 
-            current_timestamp = convert_date_to_epoch(current_date.strip())
+            current_date_timestamp = convert_date_to_epoch(current_date.strip())
             msg['created'] = current_date  # taking out date
-            last_time_epoch = max(current_timestamp, last_time_epoch)
+            last_time_epoch = max(current_date_timestamp, last_time_epoch)
             all_logs.append(msg)
 
         return all_logs, {"last_time_epoch": last_time_epoch}
@@ -270,8 +304,8 @@ class ProcessMetricsAPI(FetchMixin):
                 "auth": self.digestauth,
                 "params": {
                     "itemsPerPage": self.api_config['PAGINATION_LIMIT'], "granularity": "PT1M",
-                    "start": start_time_date, "end": end_time_date
-                    ,"m": self.api_config["METRIC_TYPES"]["PROCESS_METRICS"]
+                    "start": start_time_date, "end": end_time_date,
+                    "m": self.api_config["METRIC_TYPES"]["PROCESS_METRICS"]
                 }
         }
 
@@ -281,6 +315,16 @@ class ProcessMetricsAPI(FetchMixin):
             "endpoint_key": "HTTP_METRICS_ENDPOINT",
             "jsondump": False
         }
+
+    def check_move_fetch_window(self, kwargs):
+        # https://www.mongodb.com/docs/atlas/reference/api/process-measurements/
+        # Atlas retrieves database metrics every 20 minutes by default. Results include data points with 20 minute intervals.
+        data_availablity_max_endDate = get_current_timestamp() - 20*60
+        api_endDate = convert_utc_date_to_epoch(kwargs['params']["end"], date_format=self.isoformat)
+        if api_endDate < data_availablity_max_endDate:
+            return True, {"last_time_epoch": api_endDate}
+        else:
+            return False, {}
 
     def transform_data(self, data):
         metrics = []
@@ -333,8 +377,8 @@ class DiskMetricsAPI(FetchMixin):
             "auth": self.digestauth,
             "params": {
                 "itemsPerPage": self.api_config['PAGINATION_LIMIT'], "granularity": "PT1M",
-                "start": start_time_date, "end": end_time_date
-                ,"m": self.api_config["METRIC_TYPES"]["DISK_METRICS"]
+                "start": start_time_date, "end": end_time_date,
+                "m": self.api_config["METRIC_TYPES"]["DISK_METRICS"]
             }
         }
 
@@ -344,6 +388,16 @@ class DiskMetricsAPI(FetchMixin):
             "endpoint_key": "HTTP_METRICS_ENDPOINT",
             "jsondump": False
         }
+
+    def check_move_fetch_window(self, kwargs):
+        # hhttps://www.mongodb.com/docs/atlas/reference/api/process-disks-measurements/
+        # Atlas retrieves database metrics every 20 minutes by default. Results include data points with 20 minute intervals.
+        data_availablity_max_endDate = get_current_timestamp() - 20*60
+        api_endDate = convert_utc_date_to_epoch(kwargs['params']["end"], date_format=self.isoformat)
+        if api_endDate < data_availablity_max_endDate:
+            return True, {"last_time_epoch": api_endDate}
+        else:
+            return False, {}
 
     def transform_data(self, data):
         metrics = []
@@ -395,9 +449,10 @@ class DatabaseMetricsAPI(FetchMixin):
         end_time_date = convert_epoch_to_utc_date(end_time_epoch, date_format=self.isoformat)
         return f'''{self.api_config['BASE_URL']}/groups/{self.api_config['PROJECT_ID']}/processes/{self.process_id}/databases/{self.database_name}/measurements''', {
             "auth": self.digestauth,
-            "params": {"itemsPerPage": self.api_config['PAGINATION_LIMIT'], "granularity": "PT1M",
-                       "start": start_time_date, "end": end_time_date
-                        ,"m": self.api_config["METRIC_TYPES"]["DATABASE_METRICS"]
+            "params": {
+                "itemsPerPage": self.api_config['PAGINATION_LIMIT'], "granularity": "PT1M",
+                "start": start_time_date, "end": end_time_date,
+                "m": self.api_config["METRIC_TYPES"]["DATABASE_METRICS"]
             }
         }
 
@@ -407,6 +462,16 @@ class DatabaseMetricsAPI(FetchMixin):
             "endpoint_key": "HTTP_METRICS_ENDPOINT",
             "jsondump": False
         }
+
+    def check_move_fetch_window(self, kwargs):
+        # https://www.mongodb.com/docs/atlas/reference/api/process-databases-measurements/
+        # Atlas retrieves database metrics every 20 minutes by default. Results include data points with 20 minute intervals.
+        data_availablity_max_endDate = get_current_timestamp() - 20*60
+        api_endDate = convert_utc_date_to_epoch(kwargs['params']["end"], date_format=self.isoformat)
+        if api_endDate < data_availablity_max_endDate:
+            return True, {"last_time_epoch": api_endDate}
+        else:
+            return False, {}
 
     def transform_data(self, data):
         metrics = []
@@ -468,11 +533,19 @@ class ProjectEventsAPI(PaginatedFetchMixin):
             "endpoint_key": "HTTP_LOGS_ENDPOINT"
         }
 
+    def check_move_fetch_window(self, kwargs):
+        # https://www.mongodb.com/docs/atlas/reference/api/events-projects-get-all/
+        # no information given so assuming data gets retrieved in 5 min similar to database logs
+
+        data_availablity_max_endDate = get_current_timestamp() - 5*60
+        api_endDate = convert_utc_date_to_epoch(kwargs['params']["maxDate"], date_format=self.isoformat)
+        if api_endDate < data_availablity_max_endDate:
+            return True, {"last_time_epoch": api_endDate, "page_num": 0}
+        else:
+            return False, {}
+
     def transform_data(self, data):
 
-        # assuming file content is small so inmemory possible
-        # https://stackoverflow.com/questions/11914472/stringio-in-python3
-        # https://stackoverflow.com/questions/8858414/using-python-how-do-you-untar-purely-in-memory
         last_time_epoch = self.DEFAULT_START_TIME_EPOCH
         event_logs = []
         for obj in data['results']:
@@ -493,11 +566,9 @@ class OrgEventsAPI(PaginatedFetchMixin):
         key = f'''{self.api_config['ORGANIZATION_ID']}-orgevents'''
         return key
 
-
     def save_state(self, state):
         key = self.get_key()
         self.kvstore.set(key, state)
-
 
     def get_state(self):
         key = self.get_key()
@@ -505,7 +576,6 @@ class OrgEventsAPI(PaginatedFetchMixin):
             self.save_state({"last_time_epoch": self.DEFAULT_START_TIME_EPOCH, "page_num": 0})
         obj = self.kvstore.get(key)
         return obj
-
 
     def build_fetch_params(self):
         state = self.get_state()
@@ -530,11 +600,19 @@ class OrgEventsAPI(PaginatedFetchMixin):
             "endpoint_key": "HTTP_LOGS_ENDPOINT"
         }
 
+    def check_move_fetch_window(self, kwargs):
+        # https://www.mongodb.com/docs/atlas/reference/api/events-projects-get-all/
+        # no information given so assuming data gets retrieved in 5 min similar to database logs
+
+        data_availablity_max_endDate = get_current_timestamp() - 5*60
+        api_endDate = convert_utc_date_to_epoch(kwargs['params']["maxDate"], date_format=self.isoformat)
+        if api_endDate < data_availablity_max_endDate:
+            return True, {"last_time_epoch": api_endDate, "page_num": 0}
+        else:
+            return False, {}
+
     def transform_data(self, data):
 
-        # assuming file content is small so inmemory possible
-        # https://stackoverflow.com/questions/11914472/stringio-in-python3
-        # https://stackoverflow.com/questions/8858414/using-python-how-do-you-untar-purely-in-memory
         last_time_epoch = self.DEFAULT_START_TIME_EPOCH
         event_logs = []
         for obj in data['results']:
@@ -588,10 +666,6 @@ class AlertsAPI(MongoDBAPI):
 
     def transform_data(self, data):
 
-        # assuming file content is small so inmemory possible
-        # https://stackoverflow.com/questions/11914472/stringio-in-python3
-        # https://stackoverflow.com/questions/8858414/using-python-how-do-you-untar-purely-in-memory
-
         event_logs = []
         for obj in data['results']:
             event_logs.append(obj)
@@ -619,7 +693,7 @@ class AlertsAPI(MongoDBAPI):
                         send_success = output_handler.send(payload, **self.build_send_params())
                         if send_success:
                             count += 1
-                            self.log.debug(f'''Fetching Project: {self.api_config['PROJECT_ID']} Alerts Page: {kwargs['params']['pageNum']}  Datalen: {len(payload)} ''')
+                            self.log.debug(f'''Successfully sent LogType: {log_type} Project: {self.api_config['PROJECT_ID']} Alerts Page: {kwargs['params']['pageNum']}  Datalen: {len(payload)} ''')
                             current_state.update(updated_state)
                             if current_state['last_page_offset'] == 0:
                                 # do not increase if num alerts < page limit
