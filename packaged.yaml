@@ -15,10 +15,10 @@ Metadata:
     - atlas
     - serverless
     - MongoDBAtlas
-    LicenseUrl: s3://appdevstore/MongoDBAtlas/v1.0.15/5122657d5b9a0d3713e24d3a33eae431
+    LicenseUrl: s3://appdevstore/MongoDBAtlas/v1.0.17/5122657d5b9a0d3713e24d3a33eae431
     Name: sumologic-mongodb-atlas
-    ReadmeUrl: s3://appdevstore/MongoDBAtlas/v1.0.15/5866849a98131c58cb7edb85893d4414
-    SemanticVersion: 1.0.15
+    ReadmeUrl: s3://appdevstore/MongoDBAtlas/v1.0.17/3088978c83fe207a640a2584aff2c79d
+    SemanticVersion: 1.0.17
     SourceCodeUrl: https://github.com/SumoLogic/sumologic-mongodb-atlas
     SpdxLicenseId: Apache-2.0
 Outputs:
@@ -44,7 +44,7 @@ Parameters:
 Resources:
   MongoDBAtlasFunction:
     Properties:
-      CodeUri: s3://appdevstore/MongoDBAtlas/v1.0.15/60d2a1994510235d0222728d75fe810f
+      CodeUri: s3://appdevstore/MongoDBAtlas/v1.0.17/56c4530782ed537044f71da21d57b605
       Environment:
         Variables:
           ENABLE_CONSOLE_LOG: 'false'
@@ -70,7 +70,7 @@ Resources:
       MemorySize: 256
       Policies:
       - AmazonDynamoDBFullAccess
-      Runtime: python3.7
+      Runtime: python3.11
       Timeout: 900
     Type: AWS::Serverless::Function
     Metadata:

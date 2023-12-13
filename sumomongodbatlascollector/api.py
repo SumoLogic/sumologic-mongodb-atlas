@@ -190,6 +190,7 @@ class LogAPI(FetchMixin):
         obj = self.kvstore.get(key)
         return obj
 
+    # API Ref: https://www.mongodb.com/docs/atlas/reference/api-resources-spec/v1/#tag/Monitoring-and-Logs/operation/downloadHostLogs
     def build_fetch_params(self):
         start_time_epoch, end_time_epoch = self.get_window(self.get_state()['last_time_epoch'])
 
@@ -296,6 +297,7 @@ class ProcessMetricsAPI(FetchMixin):
         obj = self.kvstore.get(key)
         return obj
 
+    # API Ref: https://www.mongodb.com/docs/atlas/reference/api-resources-spec/v1/#tag/Monitoring-and-Logs/operation/getHostMeasurements
     def build_fetch_params(self):
         start_time_epoch, end_time_epoch = self.get_window(self.get_state()['last_time_epoch'])
         start_time_date = convert_epoch_to_utc_date(start_time_epoch, date_format=self.isoformat)
@@ -368,7 +370,7 @@ class DiskMetricsAPI(FetchMixin):
             self.save_state(self.DEFAULT_START_TIME_EPOCH)
         obj = self.kvstore.get(key)
         return obj
-
+    # API Ref: https://www.mongodb.com/docs/atlas/reference/api-resources-spec/v1/#tag/Monitoring-and-Logs/operation/getDiskMeasurements
     def build_fetch_params(self):
         start_time_epoch, end_time_epoch = self.get_window(self.get_state()['last_time_epoch'])
         start_time_date = convert_epoch_to_utc_date(start_time_epoch, date_format=self.isoformat)
@@ -443,6 +445,7 @@ class DatabaseMetricsAPI(FetchMixin):
         obj = self.kvstore.get(key)
         return obj
 
+    # API Ref: https://www.mongodb.com/docs/atlas/reference/api-resources-spec/v1/#tag/Monitoring-and-Logs/operation/getDatabaseMeasurements
     def build_fetch_params(self):
         start_time_epoch, end_time_epoch = self.get_window(self.get_state()['last_time_epoch'])
         start_time_date = convert_epoch_to_utc_date(start_time_epoch, date_format=self.isoformat)
@@ -510,6 +513,7 @@ class ProjectEventsAPI(PaginatedFetchMixin):
         obj = self.kvstore.get(key)
         return obj
 
+    # API Ref: https://www.mongodb.com/docs/atlas/reference/api-resources-spec/v1/#tag/Events/operation/listProjectEvents
     def build_fetch_params(self):
         state = self.get_state()
         if state["page_num"] == 0:
@@ -546,6 +550,9 @@ class ProjectEventsAPI(PaginatedFetchMixin):
 
     def transform_data(self, data):
 
+        # assuming file content is small so inmemory possible
+        # https://stackoverflow.com/questions/11914472/stringio-in-python3
+        # https://stackoverflow.com/questions/8858414/using-python-how-do-you-untar-purely-in-memory
         last_time_epoch = self.DEFAULT_START_TIME_EPOCH
         event_logs = []
         for obj in data['results']:
@@ -577,6 +584,7 @@ class OrgEventsAPI(PaginatedFetchMixin):
         obj = self.kvstore.get(key)
         return obj
 
+    # API Ref: https://www.mongodb.com/docs/atlas/reference/api-resources-spec/v1/#tag/Events/operation/listOrganizationEvents
     def build_fetch_params(self):
         state = self.get_state()
         if state["page_num"] == 0:
@@ -613,6 +621,9 @@ class OrgEventsAPI(PaginatedFetchMixin):
 
     def transform_data(self, data):
 
+        # assuming file content is small so inmemory possible
+        # https://stackoverflow.com/questions/11914472/stringio-in-python3
+        # https://stackoverflow.com/questions/8858414/using-python-how-do-you-untar-purely-in-memory
         last_time_epoch = self.DEFAULT_START_TIME_EPOCH
         event_logs = []
         for obj in data['results']:
@@ -646,6 +657,7 @@ class AlertsAPI(MongoDBAPI):
         obj = self.kvstore.get(key)
         return obj
 
+    # API Ref: https://www.mongodb.com/docs/atlas/reference/api-resources-spec/v1/#tag/Alerts/operation/listAlerts
     def build_fetch_params(self):
         state = self.get_state()
         if state["page_num"] == 0:
@@ -665,6 +677,10 @@ class AlertsAPI(MongoDBAPI):
         }
 
     def transform_data(self, data):
+
+        # assuming file content is small so inmemory possible
+        # https://stackoverflow.com/questions/11914472/stringio-in-python3
+        # https://stackoverflow.com/questions/8858414/using-python-how-do-you-untar-purely-in-memory
 
         event_logs = []
         for obj in data['results']:
