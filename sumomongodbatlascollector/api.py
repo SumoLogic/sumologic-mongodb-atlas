@@ -1,4 +1,4 @@
-# -*- coding: future_fstrings -*-
+n# -*- coding: utf-8 -*-
 
 import gzip
 import json
@@ -38,9 +38,11 @@ class MongoDBAPI(BaseAPI):
 
         return start_time_epoch, end_time_epoch
 
+	@staticmethod
     def _get_cluster_name(self, full_name_with_cluster):
         return full_name_with_cluster.split("-shard")[0]
 
+	@staticmethod
     def _replace_cluster_name(self, full_name_with_cluster, cluster_mapping):
         cluster_name = self._get_cluster_name(full_name_with_cluster)
         cluster_alias = cluster_mapping.get(cluster_name, cluster_name)
@@ -51,17 +53,15 @@ class FetchMixin(MongoDBAPI):
 
     def fetch(self):
         log_type = self.get_key()
-        output_handler = OutputHandlerFactory.get_handler(self.collection_config['OUTPUT_HANDLER'], path=self.pathname, config=self.config)
-        url, kwargs = self.build_fetch_params()
-        self.log.info(f'''Fetching LogType: {log_type} kwargs: {kwargs}''')
-        state = None
-        payload = []
+        output_handler = None
         try:
-
+            output_handler = OutputHandlerFactory.get_handler(self.collection_config['OUTPUT_HANDLER'], path=self.pathname, config=self.config)
+            url, kwargs = self.build_fetch_params()
+            self.log.info(f'''Fetching LogType: {log_type} kwargs: {kwargs}''')
+            state = None
             fetch_success, content = ClientMixin.make_request(url, method="get", logger=self.log, TIMEOUT=self.collection_config['TIMEOUT'], MAX_RETRY=self.collection_config['MAX_RETRY'], BACKOFF_FACTOR=self.collection_config['BACKOFF_FACTOR'], **kwargs)
-            if fetch_success and len(content) > 0:
+            if fetch_success and content:
                 payload, state = self.transform_data(content)
-                #Todo Make this atomic if after sending -> Ctrl - C happens then it fails to save state
                 params = self.build_send_params()
                 send_success = output_handler.send(payload, **params)
                 if send_success:
@@ -69,7 +69,7 @@ class FetchMixin(MongoDBAPI):
                     self.log.info(f'''Successfully sent LogType: {self.get_key()} Data: {len(content)}''')
                 else:
                     self.log.error(f'''Failed to send LogType: {self.get_key()}''')
-            elif fetch_success and len(content) == 0:
+            elif fetch_success:
                 self.log.info(f'''No results window LogType: {log_type} kwargs: {kwargs} status: {fetch_success}''')
                 is_move_fetch_window, new_state = self.check_move_fetch_window(kwargs)
                 if is_move_fetch_window:
@@ -77,40 +77,41 @@ class FetchMixin(MongoDBAPI):
                     self.log.debug(f'''Moving fetched window newstate: {new_state}''')
             else:
                 self.log.error(f'''Error LogType: {log_type} status: {fetch_success} reason: {content}''')
+        except Exception as e:
+            self.log.exception(f'''Exception occurred while fetching LogType: {log_type}''')
         finally:
-            output_handler.close()
-            self.log.info(f'''Completed LogType: {log_type} curstate: {state} datasent: {len(payload)}''')
-
+            if output_handler:
+                output_handler.close()
+            self.log.info(f'''Completed LogType: {log_type} curstate: {state} datasent: {len(payload) if 'payload' in locals() else 0}''')
 
 class PaginatedFetchMixin(MongoDBAPI):
 
     def fetch(self):
         current_state = self.get_state()
-        output_handler = OutputHandlerFactory.get_handler(self.collection_config['OUTPUT_HANDLER'], path=self.pathname, config=self.config)
-        url, kwargs = self.build_fetch_params()
-        log_type = self.get_key()
-        next_request = True
-        count = 0
-        sess = ClientMixin.get_new_session()
-        self.log.info(f'''Fetching LogType: {log_type}  starttime: {kwargs['params']['minDate']} endtime: {kwargs['params']['maxDate']}''')
+        output_handler = None
         try:
+            output_handler = OutputHandlerFactory.get_handler(self.collection_config['OUTPUT_HANDLER'], path=self.pathname, config=self.config)
+            url, kwargs = self.build_fetch_params()
+            log_type = self.get_key()
+            next_request = True
+            count = 0
+            sess = ClientMixin.get_new_session()
+            self.log.info(f'''Fetching LogType: {log_type}  starttime: {kwargs['params']['minDate']} endtime: {kwargs['params']['maxDate']}''')
             while next_request:
                 send_success = has_next_page = False
                 status, data = ClientMixin.make_request(url, method="get", session=sess, logger=self.log, TIMEOUT=self.collection_config['TIMEOUT'], MAX_RETRY=self.collection_config['MAX_RETRY'], BACKOFF_FACTOR=self.collection_config['BACKOFF_FACTOR'], **kwargs)
                 fetch_success = status and "results" in data
                 if fetch_success:
-                    has_next_page = len(data['results']) > 0
+                    has_next_page = bool(data['results'])
                     if has_next_page:
                         payload, updated_state = self.transform_data(data)
                         params = self.build_send_params()
                         send_success = output_handler.send(payload, **params)
                         if send_success:
-                            count +=1
+                            count += 1
                             self.log.debug(f'''Successfully sent LogType: {log_type} Page: {kwargs['params']['pageNum']}  Datalen: {len(payload)} starttime: {kwargs['params']['minDate']} endtime: {kwargs['params']['maxDate']}''')
                             kwargs['params']['pageNum'] += 1
-                            # save and update last_time_epoch required for next invocation
                             current_state.update(updated_state)
-                            # time not available save current state new page num else continue
                             if not self.is_time_remaining():
                                 self.save_state({
                                     "start_time_epoch": convert_utc_date_to_epoch(kwargs['params']['minDate']),
@@ -119,7 +120,6 @@ class PaginatedFetchMixin(MongoDBAPI):
                                     "last_time_epoch": current_state['last_time_epoch']
                                 })
                         else:
-                            # show err unable to send save current state
                             self.log.error(f'''Failed to send LogType: {log_type} Page: {kwargs['params']['pageNum']} starttime: {kwargs['params']['minDate']} endtime: {kwargs['params']['maxDate']}''')
                             self.save_state({
                                 "start_time_epoch": convert_utc_date_to_epoch(kwargs['params']['minDate']),
@@ -128,9 +128,6 @@ class PaginatedFetchMixin(MongoDBAPI):
                                 "last_time_epoch": current_state['last_time_epoch']
                             })
                     else:
-
-                        # here fetch success is true and assuming pageNum starts from 1
-                        # page_num has finished increase window calc last_time_epoch
                         if kwargs['params']['pageNum'] > 1:
                             self.log.debug(f'''Moving starttime window LogType: {log_type} Page: {kwargs['params']['pageNum']} starttime: {kwargs['params']['minDate']} endtime: {kwargs['params']['maxDate']} to last_time_epoch": {convert_epoch_to_utc_date(current_state['last_time_epoch'], date_format=self.isoformat)}''')
                             self.save_state({
@@ -138,7 +135,6 @@ class PaginatedFetchMixin(MongoDBAPI):
                                 "last_time_epoch": current_state['last_time_epoch']
                             })
                         else:
-                            # genuine no result window no change
                             self.log.info(f'''No results window LogType: {log_type} Page: {kwargs['params']['pageNum']} starttime: {kwargs['params']['minDate']} endtime: {kwargs['params']['maxDate']} status: {fetch_success}''')
                             is_move_fetch_window, updated_state = self.check_move_fetch_window(kwargs)
                             if is_move_fetch_window:
@@ -148,7 +144,6 @@ class PaginatedFetchMixin(MongoDBAPI):
                                     "page_num": 0,
                                     "last_time_epoch": current_state['last_time_epoch']
                                 })
-
                 else:
                     self.save_state({
                         "start_time_epoch": convert_utc_date_to_epoch(kwargs['params']['minDate']),
@@ -158,10 +153,14 @@ class PaginatedFetchMixin(MongoDBAPI):
                     })
                     self.log.error(f'''Failed to fetch LogType: {log_type} Page: {kwargs['params']['pageNum']} Reason: {data} starttime: {kwargs['params']['minDate']} endtime: {kwargs['params']['maxDate']}''')
                 next_request = fetch_success and send_success and has_next_page and self.is_time_remaining()
+        except Exception as e:
+            self.log.exception(f'''Exception occurred while fetching LogType: {log_type}''')
         finally:
-            sess.close()
-            self.log.info(f'''Completed LogType: {log_type} Count: {count} Page: {kwargs['params']['pageNum']} starttime: {kwargs['params']['minDate']} endtime: {kwargs['params']['maxDate']}''')
-
+            if output_handler:
+                output_handler.close()
+            if 'sess' in locals():
+                sess.close()
+            self.log.info(f'''Completed LogType: {log_type} Count: {count} Page: {kwargs['params']['pageNum'] if 'kwargs' in locals() else 'N/A'} starttime: {kwargs['params']['minDate'] if 'kwargs' in locals() else 'N/A'} endtime: {kwargs['params']['maxDate'] if 'kwargs' in locals() else 'N/A'}''')
 
 class LogAPI(FetchMixin):
     # single API
@@ -175,8 +174,7 @@ class LogAPI(FetchMixin):
         self.cluster_mapping = cluster_mapping
 
     def get_key(self):
-        key = f'''{self.api_config['PROJECT_ID']}-{self.hostname}-{self.filename}'''
-        return key
+        return f'''{self.api_config['PROJECT_ID']}-{self.hostname}-{self.filename}'''
 
     def save_state(self, last_time_epoch):
         key = self.get_key()
@@ -187,19 +185,18 @@ class LogAPI(FetchMixin):
         key = self.get_key()
         if not self.kvstore.has_key(key):
             self.save_state(self.DEFAULT_START_TIME_EPOCH)
-        obj = self.kvstore.get(key)
-        return obj
+        return self.kvstore.get(key)
 
     # API Ref: https://www.mongodb.com/docs/atlas/reference/api-resources-spec/v1/#tag/Monitoring-and-Logs/operation/downloadHostLogs
     def build_fetch_params(self):
         start_time_epoch, end_time_epoch = self.get_window(self.get_state()['last_time_epoch'])
 
         return f'''{self.api_config['BASE_URL']}/groups/{self.api_config['PROJECT_ID']}/clusters/{self.hostname}/logs/{self.filename}''', {
-                "auth": self.digestauth,
-                "params": {"startDate": int(start_time_epoch), "endDate": int(end_time_epoch)}, # this api does not take ms
-                "headers": {"Accept": "application/gzip"},
-                "is_file": True
-            }
+            "auth": self.digestauth,
+            "params": {"startDate": int(start_time_epoch), "endDate": int(end_time_epoch)},  # this api does not take ms
+            "headers": {"Accept": "application/gzip"},
+            "is_file": True
+        }
 
     def build_send_params(self):
         return {
@@ -210,7 +207,7 @@ class LogAPI(FetchMixin):
     def check_move_fetch_window(self, kwargs):
         # https://www.mongodb.com/docs/atlas/reference/api/logs/
         # Process and audit logs are updated from the cluster backend infrastructure every five minutes and contain log data from the previous five minutes.
-        data_availablity_max_endDate = int(get_current_timestamp() - 5*60)
+        data_availablity_max_endDate = int(get_current_timestamp() - 5 * 60)
         api_endDate = kwargs['params']["endDate"]
         if api_endDate < data_availablity_max_endDate:
             return True, {"last_time_epoch": api_endDate}
@@ -218,59 +215,47 @@ class LogAPI(FetchMixin):
             return False, {}
 
     def transform_data(self, content):
-        # assuming file content is small so inmemory possible
-        # https://stackoverflow.com/questions/11914472/stringio-in-python3
-        # https://stackoverflow.com/questions/8858414/using-python-how-do-you-untar-purely-in-memory
         all_logs = []
         last_time_epoch = self.DEFAULT_START_TIME_EPOCH
         results = gzip.GzipFile(fileobj=BytesIO(content))
         last_line = ""
-        for line_no, line in enumerate(results.readlines()):
-            if not line.strip():
-                # for JSONDecoderror in case of empty lines
+
+        for line in results:
+            line = line.strip()
+            if not line:
                 continue
+
             line = line.decode('utf-8')
             hostname_alias = self._replace_cluster_name(self.hostname, self.cluster_mapping)
             cluster_name = self._get_cluster_name(hostname_alias)
 
             if "audit" in self.filename:
-                if last_line:
-                    line = last_line + line
+                line = last_line + line
                 try:
                     msg = json.loads(line)
                     last_line = ""
-                except ValueError as e:
-                    # checking for multiline messages
+                except ValueError:
                     last_line = line
-                    self.log.warn("Multiline Message in line no: %d last_log: %s current_log: %s" % (line_no, all_logs[-1:], line))
                     continue
-                msg['project_id'] = self.api_config['PROJECT_ID']
-                msg['hostname'] = hostname_alias
-                msg['cluster_name'] = cluster_name
-                current_date = msg['ts']['$date']
             else:
-                if last_line:
-                    line = last_line + line
+                line = last_line + line
                 try:
                     msg = json.loads(line)
                     last_line = ""
-                except ValueError as e:
-                    # checking for multiline messages
+                except ValueError:
                     last_line = line
-                    self.log.warn("Multiline Message in line no: %d last_log: %s current_log: %s" % (line_no, all_logs[-1:], line))
                     continue
-                msg['project_id'] = self.api_config['PROJECT_ID']
-                msg['hostname'] = hostname_alias
-                msg['cluster_name'] = cluster_name
-                current_date = msg['t']['$date']
 
+            msg['project_id'] = self.api_config['PROJECT_ID']
+            msg['hostname'] = hostname_alias
+            msg['cluster_name'] = cluster_name
+            current_date = msg['ts']['$date'] if "audit" in self.filename else msg['t']['$date']
             current_date_timestamp = convert_date_to_epoch(current_date.strip())
-            msg['created'] = current_date  # taking out date
+            msg['created'] = current_date
             last_time_epoch = max(current_date_timestamp, last_time_epoch)
             all_logs.append(msg)
 
         return all_logs, {"last_time_epoch": last_time_epoch}
-
 
 class ProcessMetricsAPI(FetchMixin):
 
@@ -570,8 +555,7 @@ class OrgEventsAPI(PaginatedFetchMixin):
         super(OrgEventsAPI, self).__init__(kvstore, config)
 
     def get_key(self):
-        key = f'''{self.api_config['ORGANIZATION_ID']}-orgevents'''
-        return key
+        return f'''{self.api_config['ORGANIZATION_ID']}-orgevents'''
 
     def save_state(self, state):
         key = self.get_key()
@@ -581,8 +565,7 @@ class OrgEventsAPI(PaginatedFetchMixin):
         key = self.get_key()
         if not self.kvstore.has_key(key):
             self.save_state({"last_time_epoch": self.DEFAULT_START_TIME_EPOCH, "page_num": 0})
-        obj = self.kvstore.get(key)
-        return obj
+        return self.kvstore.get(key)
 
     # API Ref: https://www.mongodb.com/docs/atlas/reference/api-resources-spec/v1/#tag/Events/operation/listOrganizationEvents
     def build_fetch_params(self):
@@ -620,31 +603,22 @@ class OrgEventsAPI(PaginatedFetchMixin):
             return False, {}
 
     def transform_data(self, data):
-
-        # assuming file content is small so inmemory possible
-        # https://stackoverflow.com/questions/11914472/stringio-in-python3
-        # https://stackoverflow.com/questions/8858414/using-python-how-do-you-untar-purely-in-memory
         last_time_epoch = self.DEFAULT_START_TIME_EPOCH
-        event_logs = []
         for obj in data['results']:
             current_timestamp = convert_date_to_epoch(obj['created'])
             last_time_epoch = max(current_timestamp, last_time_epoch)
-            event_logs.append(obj)
 
-        return event_logs, {"last_time_epoch": last_time_epoch}
-
+        return data['results'], {"last_time_epoch": last_time_epoch}
 
 class AlertsAPI(MongoDBAPI):
     # In Alerts API assumption is that no new new alerts will be inserted in previous pages
-
     pathname = "alerts.json"
 
     def __init__(self, kvstore, config):
         super(AlertsAPI, self).__init__(kvstore, config)
 
     def get_key(self):
-        key = f'''{self.api_config['PROJECT_ID']}-alerts'''
-        return key
+        return f'''{self.api_config['PROJECT_ID']}-alerts'''
 
     def save_state(self, state):
         key = self.get_key()
@@ -654,16 +628,12 @@ class AlertsAPI(MongoDBAPI):
         key = self.get_key()
         if not self.kvstore.has_key(key):
             self.save_state({"page_num": 0, "last_page_offset": 0})
-        obj = self.kvstore.get(key)
-        return obj
+        return self.kvstore.get(key)
 
     # API Ref: https://www.mongodb.com/docs/atlas/reference/api-resources-spec/v1/#tag/Alerts/operation/listAlerts
     def build_fetch_params(self):
         state = self.get_state()
-        if state["page_num"] == 0:
-            page_num = 1
-        else:
-            page_num = state['page_num']
+        page_num = 1 if state["page_num"] == 0 else state['page_num']
 
         return f'''{self.api_config['BASE_URL']}/groups/{self.api_config['PROJECT_ID']}/alerts''', {
             "auth": self.digestauth,
@@ -677,16 +647,7 @@ class AlertsAPI(MongoDBAPI):
         }
 
     def transform_data(self, data):
-
-        # assuming file content is small so inmemory possible
-        # https://stackoverflow.com/questions/11914472/stringio-in-python3
-        # https://stackoverflow.com/questions/8858414/using-python-how-do-you-untar-purely-in-memory
-
-        event_logs = []
-        for obj in data['results']:
-            event_logs.append(obj)
-
-        return event_logs, {"last_page_offset": len(data["results"]) % self.api_config['PAGINATION_LIMIT']}
+        return data['results'], {"last_page_offset": len(data["results"]) % self.api_config['PAGINATION_LIMIT']}
 
     def fetch(self):
         current_state = self.get_state()
@@ -712,18 +673,15 @@ class AlertsAPI(MongoDBAPI):
                             self.log.debug(f'''Successfully sent LogType: {log_type} Project: {self.api_config['PROJECT_ID']} Alerts Page: {kwargs['params']['pageNum']}  Datalen: {len(payload)} ''')
                             current_state.update(updated_state)
                             if current_state['last_page_offset'] == 0:
-                                # do not increase if num alerts < page limit
                                 kwargs['params']['pageNum'] += 1
                             else:
                                 has_next_page = False
-                            # time not available save current state new page num else continue
                             if (not self.is_time_remaining()) or (not has_next_page):
                                 self.save_state({
                                     "page_num": kwargs['params']["pageNum"],
                                     "last_page_offset": current_state['last_page_offset']
                                 })
                         else:
-                            # show err unable to send save current state
                             self.log.error(f'''Unable to send Project: {self.api_config['PROJECT_ID']} Alerts Page: {kwargs['params']['pageNum']} ''')
                             self.save_state({
                                 "page_num": kwargs['params']["pageNum"],
@@ -731,9 +689,6 @@ class AlertsAPI(MongoDBAPI):
                             })
                     else:
                         self.log.debug(f'''Moving starttime window Project: {self.api_config['PROJECT_ID']} Alerts Page: {kwargs['params']['pageNum']} ''')
-                        # here send success is false
-                        # genuine no result window no change
-                        # page_num has finished increase window calc last_time_epoch  and add 1
                         self.save_state({
                             "page_num": kwargs['params']["pageNum"],
                             "last_page_offset": current_state['last_page_offset']
@@ -743,4 +698,5 @@ class AlertsAPI(MongoDBAPI):
                 next_request = fetch_success and send_success and has_next_page and self.is_time_remaining()
         finally:
             sess.close()
+            del data, payload  # Remove references to data and payload
             self.log.info(f'''Completed LogType: {log_type} Count: {count} Page: {kwargs['params']['pageNum']}''')

@@ -1,4 +1,4 @@
-# -*- coding: future_fstrings -*-
+# -*- coding: utf-8 -*-
 
 import traceback
 import os
@@ -130,6 +130,11 @@ class MongoDBAtlasCollector(BaseCollector):
 
         processes = self.kvstore.get('processes')
         process_ids, hostnames = processes['process_ids'], processes['hostnames']
+		process_ids_copy = process_ids.copy()
+		hostnames_copy = hostnames.copy()
+
+		del process_ids
+		del hostnames
         return process_ids, hostnames
 
     def is_running(self):
@@ -140,81 +145,106 @@ class MongoDBAtlasCollector(BaseCollector):
         self.log.debug("Releasing single instance lock")
         return self.kvstore.release_lock(self.SINGLE_PROCESS_LOCK_KEY)
 
-    def build_task_params(self):
+	def build_task_params(self):
+		audit_files = ["mongodb-audit-log.gz", "mongos-audit-log.gz"]
+		dblog_files = ["mongodb.gz", "mongos.gz"]
+		process_ids, hostnames = self._get_process_names()
+		cluster_mapping = self.kvstore.get("cluster_mapping", {}).get("values", {})
 
-        audit_files = ["mongodb-audit-log.gz", "mongos-audit-log.gz"]
-        dblog_files = ["mongodb.gz", "mongos.gz"]
-        filenames = []
-        tasks = []
-        process_ids, hostnames = self._get_process_names()
-        cluster_mapping = self.kvstore.get("cluster_mapping", {}).get("values", {})
+		try:
+			if 'LOG_TYPES' in self.api_config:
+				if "DATABASE" in self.api_config['LOG_TYPES']:
+					for filename in dblog_files:
+						for hostname in hostnames:
+							yield LogAPI(self.kvstore, hostname, filename, self.config, cluster_mapping)
+							del filename, hostname
 
-        if 'LOG_TYPES' in self.api_config:
-            if "DATABASE" in self.api_config['LOG_TYPES']:
-                filenames.extend(dblog_files)
-            if "AUDIT" in self.api_config['LOG_TYPES']:
-                filenames.extend(audit_files)
+				if "AUDIT" in self.api_config['LOG_TYPES']:
+					for filename in audit_files:
+						for hostname in hostnames:
+							yield LogAPI(self.kvstore, hostname, filename, self.config, cluster_mapping)
+							del filename, hostname
 
-            for filename in filenames:
-                for hostname in hostnames:
-                    tasks.append(LogAPI(self.kvstore, hostname, filename, self.config, cluster_mapping))
+				if "EVENTS_PROJECT" in self.api_config['LOG_TYPES']:
+					yield ProjectEventsAPI(self.kvstore, self.config)
 
-            if "EVENTS_PROJECT" in self.api_config['LOG_TYPES']:
-                tasks.append(ProjectEventsAPI(self.kvstore, self.config))
+				if "EVENTS_ORG" in self.api_config['LOG_TYPES']:
+					yield OrgEventsAPI(self.kvstore, self.config)
 
-            if "EVENTS_ORG" in self.api_config['LOG_TYPES']:
-                tasks.append(OrgEventsAPI(self.kvstore, self.config))
+				if "ALERTS" in self.api_config['LOG_TYPES']:
+					yield AlertsAPI(self.kvstore, self.config)
 
-            if "ALERTS" in self.api_config['LOG_TYPES']:
-                tasks.append(AlertsAPI(self.kvstore, self.config))
+			if 'METRIC_TYPES' in self.api_config:
+				if self.api_config['METRIC_TYPES'].get("PROCESS_METRICS", []):
+					for process_id in process_ids:
+						yield ProcessMetricsAPI(self.kvstore, process_id, self.config, cluster_mapping)
+						del process_id
 
-        if 'METRIC_TYPES' in self.api_config:
-            if self.api_config['METRIC_TYPES'].get("PROCESS_METRICS", []):
-                for process_id in process_ids:
-                    tasks.append(ProcessMetricsAPI(self.kvstore, process_id, self.config, cluster_mapping))
+				if self.api_config['METRIC_TYPES'].get("DISK_METRICS", []):
+					disk_names = self._get_disk_names()
+					for process_id in process_ids:
+						for disk_name in disk_names:
+							yield DiskMetricsAPI(self.kvstore, process_id, disk_name, self.config, cluster_mapping)
+							del process_id, disk_name
 
-            if self.api_config['METRIC_TYPES'].get("DISK_METRICS", []):
-                disk_names = self._get_disk_names()
-                for process_id in process_ids:
-                    for disk_name in disk_names:
-                        tasks.append(DiskMetricsAPI(self.kvstore, process_id, disk_name, self.config, cluster_mapping))
+				if self.api_config['METRIC_TYPES'].get("DATABASE_METRICS", []):
+					database_names = self._get_database_names()
+					for process_id in process_ids:
+						for database_name in database_names:
+							yield DatabaseMetricsAPI(self.kvstore, process_id, database_name, self.config, cluster_mapping)
+							del process_id, database_name
 
-            if self.api_config['METRIC_TYPES'].get("DATABASE_METRICS", []):
-                database_names = self._get_database_names()
-                for process_id in process_ids:
-                    for database_name in database_names:
-                        tasks.append(DatabaseMetricsAPI(self.kvstore, process_id, database_name, self.config, cluster_mapping))
+		except Exception as e:
+			self.log.error(f"An error occurred while building task parameters: {e}", exc_info=True)
+		finally:
+			del audit_files, dblog_files, process_ids, hostnames, cluster_mapping
 
-        self.log.info("%d Tasks Generated" % len(tasks))
-        return tasks
+		self.log.info("Generated task parameters")
 
-    def run(self):
-        if self.is_running():
-            try:
-                self.log.info('Starting MongoDB Atlas Forwarder...')
-                task_params = self.build_task_params()
-                shuffle(task_params)
-                all_futures = {}
-                self.log.debug("spawning %d workers" % self.config['Collection']['NUM_WORKERS'])
-                with futures.ThreadPoolExecutor(max_workers=self.config['Collection']['NUM_WORKERS']) as executor:
-                    results = {executor.submit(apiobj.fetch): apiobj for apiobj in task_params}
-                    all_futures.update(results)
-                for future in futures.as_completed(all_futures):
-                    param = all_futures[future]
-                    api_type = str(param)
-                    try:
-                        future.result()
-                        obj = self.kvstore.get(api_type)
-                    except Exception as exc:
-                        self.log.error(f"API Type: {api_type} thread generated an exception: {exc}", exc_info=True)
-                    else:
-                        self.log.info(f"API Type: {api_type} thread completed {obj}")
-            finally:
-                self.stop_running()
-                self.mongosess.close()
-        else:
-            if not self.is_process_running(["sumomongodbatlascollector"]):
-                self.kvstore.release_lock_on_expired_key(self.SINGLE_PROCESS_LOCK_KEY, expiry_min=10)
+	def run(self):
+    if self.is_running():
+        try:
+            self.log.info('Starting MongoDB Atlas Forwarder...')
+            task_params = self.build_task_params()
+            task_params = list(task_params)
+            shuffle(task_params)
+            
+            all_futures = {}
+            num_workers = self.config['Collection']['NUM_WORKERS']
+            self.log.debug(f"Spawning {num_workers} workers")
+            
+            with futures.ThreadPoolExecutor(max_workers=num_workers) as executor:
+                results = {executor.submit(apiobj.fetch): apiobj for apiobj in task_params}
+                all_futures.update(results)
+            
+            for future in futures.as_completed(all_futures):
+                param = all_futures[future]
+                api_type = str(param)
+                try:
+                    result = future.result()
+                    del result
+                except Exception as exc:
+                    self.log.error(f"API Type: {api_type} thread generated an exception: {exc}", exc_info=True)
+                else:
+                    self.log.info(f"API Type: {api_type} thread completed")
+                
+                del future
+                del param
+            
+            all_futures.clear()
+            del task_params
+        
+        except Exception as e:
+            self.log.error(f"An error occurred: {e}", exc_info=True)
+        
+        finally:
+            self.stop_running()
+            self.mongosess.close()
+            del self.mongosess
+    
+    else:
+        if not self.is_process_running(["sumomongodbatlascollector"]):
+            self.kvstore.release_lock_on_expired_key(self.SINGLE_PROCESS_LOCK_KEY, expiry_min=10)
 
     def test(self):
         if self.is_running():
