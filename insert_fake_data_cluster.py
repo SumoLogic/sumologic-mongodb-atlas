@@ -1,4 +1,5 @@
 import asyncio
+
 from faker import Faker
 from motor.motor_asyncio import AsyncIOMotorClient
 
@@ -11,6 +12,7 @@ db = client["database-name"]
 # Define the collections where data is to be inserted
 collection1 = db["dummy_collection"]
 collection2 = db["dummy_collection_1"]
+
 
 async def generate_fake_data():
     data = {
@@ -25,8 +27,10 @@ async def generate_fake_data():
     }
     return data
 
+
 async def insert_data(collection, data):
     await collection.insert_one(data)
+
 
 async def main():
     num_records = 10000
@@ -40,5 +44,6 @@ async def main():
     await asyncio.gather(*tasks)
 
     print(f"Inserted {num_records} records into each collection.")
+
 
 asyncio.run(main())

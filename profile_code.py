@@ -1,67 +1,79 @@
 import memory_profiler
 import pyinstrument
-import time
-
-from api import ProcessMetricsAPI, ProjectEventsAPI, OrgEventsAPI, DiskMetricsAPI, LogAPI, AlertsAPI, DatabaseMetricsAPI, FetchMixin, PaginatedFetchMixin
+from api import (AlertsAPI, DatabaseMetricsAPI, DiskMetricsAPI, FetchMixin,
+                 LogAPI, OrgEventsAPI, PaginatedFetchMixin, ProcessMetricsAPI,
+                 ProjectEventsAPI)
 from main import MongoDBAtlasCollector
+
 
 @memory_profiler.profile
 def profile_fetch_mixin():
-	fetch_mixin = FetchMixin(kvstore=None, config=None)
-	fetch_mixin.fetch()
+    fetch_mixin = FetchMixin(kvstore=None, config=None)
+    fetch_mixin.fetch()
 
 
 @memory_profiler.profile
 def profile_paginated_fetch_mixin():
-	paginated_fetch_mixin = PaginatedFetchMixin(kvstore=None, config=None)
-	paginated_fetch_mixin.fetch()
+    paginated_fetch_mixin = PaginatedFetchMixin(kvstore=None, config=None)
+    paginated_fetch_mixin.fetch()
+
 
 @memory_profiler.profile
 def profile_process_metrics_api():
     process_metrics_api = ProcessMetricsAPI(kvstore=None, config=None)
     process_metrics_api.fetch()
 
+
 @memory_profiler.profile
 def profile_project_events_api():
     project_events_api = ProjectEventsAPI(kvstore=None, config=None)
     project_events_api.fetch()
+
 
 @memory_profiler.profile
 def profile_org_events_api():
     org_events_api = OrgEventsAPI(kvstore=None, config=None)
     org_events_api.fetch()
 
+
 @memory_profiler.profile
 def profile_disk_metrics_api():
     disk_metrics_api = DiskMetricsAPI(kvstore=None, config=None)
     disk_metrics_api.fetch()
+
 
 @memory_profiler.profile
 def profile_log_api():
     log_api = LogAPI(kvstore=None, config=None)
     log_api.fetch()
 
+
 @memory_profiler.profile
 def profile_alerts_api():
     alerts_api = AlertsAPI(kvstore=None, config=None)
     alerts_api.fetch()
+
 
 @memory_profiler.profile
 def profile_database_metrics_api():
     database_metrics_api = DatabaseMetricsAPI(kvstore=None, config=None)
     database_metrics_api.fetch()
 
+
 @memory_profiler.profile
 def profile_build_task_params(collector):
     collector.build_task_params()
+
 
 @memory_profiler.profile
 def profile_run(collector):
     collector.run()
 
+
 @memory_profiler.profile
 def profile_test(collector):
     collector.test()
+
 
 def generate_flamegraph():
     profiler = pyinstrument.Profiler()
@@ -90,8 +102,9 @@ def generate_flamegraph():
 
     profiler.stop()
 
-    with open('flamegraph.html', 'w') as f:
+    with open("flamegraph.html", "w") as f:
         f.write(profiler.output_html())
+
 
 def generate_flamegraph_collector(collector):
     profiler = pyinstrument.Profiler()
@@ -103,10 +116,11 @@ def generate_flamegraph_collector(collector):
 
     profiler.stop()
 
-    with open('flamegraph_collector.html', 'w') as f:
+    with open("flamegraph_collector.html", "w") as f:
         f.write(profiler.output_html())
 
-if __name__ == '__main__':
+
+if __name__ == "__main__":
     print("Profiling ProcessMetricsAPI...")
     profile_process_metrics_api()
 
@@ -132,8 +146,7 @@ if __name__ == '__main__':
     generate_flamegraph()
     print("Flame graph generated: flamegraph.html")
 
-
-	collector = MongoDBAtlasCollector()
+    collector = MongoDBAtlasCollector()
 
     # Profile build_task_params
     print("Profiling build_task_params...")
