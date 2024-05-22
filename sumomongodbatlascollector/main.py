@@ -262,7 +262,6 @@ class MongoDBAtlasCollector(BaseCollector):
                                 self.config,
                                 cluster_mapping,
                             )
-                            # del filename, hostname
 
                 if "AUDIT" in self.api_config["LOG_TYPES"]:
                     for filename in audit_files:
@@ -274,7 +273,6 @@ class MongoDBAtlasCollector(BaseCollector):
                                 self.config,
                                 cluster_mapping,
                             )
-                            # del filename, hostname
 
                 if "EVENTS_PROJECT" in self.api_config["LOG_TYPES"]:
                     yield ProjectEventsAPI(self.kvstore, self.config)
@@ -294,7 +292,6 @@ class MongoDBAtlasCollector(BaseCollector):
                             self.config,
                             cluster_mapping,
                         )
-                        # del process_id
 
                 if self.api_config["METRIC_TYPES"].get("DISK_METRICS", []):
                     disk_names = self._get_disk_names()
@@ -307,7 +304,6 @@ class MongoDBAtlasCollector(BaseCollector):
                                 self.config,
                                 cluster_mapping,
                             )
-                            # del process_id, disk_name
 
                 if self.api_config["METRIC_TYPES"].get("DATABASE_METRICS", []):
                     database_names = self._get_database_names()
@@ -320,7 +316,6 @@ class MongoDBAtlasCollector(BaseCollector):
                                 self.config,
                                 cluster_mapping,
                             )
-                            # del process_id, database_name
 
         except Exception as e:
             self.log.error(

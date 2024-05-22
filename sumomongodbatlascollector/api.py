@@ -42,6 +42,7 @@ class MongoDBAPI(BaseAPI):
         while not (
             end_time_epoch - start_time_epoch > MIN_REQUEST_WINDOW_LENGTH
         ):
+            # initially last_time_epoch is same as current_time_stamp so endtime becomes lesser than starttime
             time.sleep(MIN_REQUEST_WINDOW_LENGTH)
             end_time_epoch = (
                 get_current_timestamp()
@@ -66,6 +67,7 @@ class FetchMixin(MongoDBAPI):
     def fetch(self):
         log_type = self.get_key()
         output_handler = None
+        payload = []
         try:
             output_handler = OutputHandlerFactory.get_handler(
                 self.collection_config["OUTPUT_HANDLER"],
@@ -86,6 +88,7 @@ class FetchMixin(MongoDBAPI):
             )
             if fetch_success and content:
                 payload, state = self.transform_data(content)
+                #Todo Make this atomic if after sending -> Ctrl - C happens then it fails to save state
                 params = self.build_send_params()
                 send_success = output_handler.send(payload, **params)
                 if send_success:
@@ -121,7 +124,7 @@ class FetchMixin(MongoDBAPI):
             if output_handler:
                 output_handler.close()
             self.log.info(
-                f"""Completed LogType: {log_type} curstate: {state} datasent: {len(payload) if 'payload' in locals() else 0}"""
+                f"""Completed LogType: {log_type} curstate: {state} datasent: {len(payload)}"""
             )
 
 
@@ -168,7 +171,9 @@ class PaginatedFetchMixin(MongoDBAPI):
                                 f"""Successfully sent LogType: {log_type} Page: {kwargs['params']['pageNum']}  Datalen: {len(payload)} starttime: {kwargs['params']['minDate']} endtime: {kwargs['params']['maxDate']}"""
                             )
                             kwargs["params"]["pageNum"] += 1
+                            # save and update last_time_epoch required for next invocation
                             current_state.update(updated_state)
+                            # time not available save current state new page num else continue
                             if not self.is_time_remaining():
                                 self.save_state(
                                     {
@@ -187,6 +192,7 @@ class PaginatedFetchMixin(MongoDBAPI):
                                     }
                                 )
                         else:
+                            # show err unable to send save current state
                             self.log.error(
                                 f"""Failed to send LogType: {log_type} Page: {kwargs['params']['pageNum']} starttime: {kwargs['params']['minDate']} endtime: {kwargs['params']['maxDate']}"""
                             )
@@ -205,6 +211,8 @@ class PaginatedFetchMixin(MongoDBAPI):
                                 }
                             )
                     else:
+                        # here fetch success is true and assuming pageNum starts from 1
+                        # page_num has finished increase window calc last_time_epoch
                         if kwargs["params"]["pageNum"] > 1:
                             self.log.debug(
                                 f"""Moving starttime window LogType: {log_type} Page: {kwargs['params']['pageNum']} starttime: {kwargs['params']['minDate']} endtime: {kwargs['params']['maxDate']} to last_time_epoch": {convert_epoch_to_utc_date(current_state['last_time_epoch'], date_format=self.isoformat)}"""
@@ -218,6 +226,7 @@ class PaginatedFetchMixin(MongoDBAPI):
                                 }
                             )
                         else:
+                            # genuine no result window no change
                             self.log.info(
                                 f"""No results window LogType: {log_type} Page: {kwargs['params']['pageNum']} starttime: {kwargs['params']['minDate']} endtime: {kwargs['params']['maxDate']} status: {fetch_success}"""
                             )
@@ -272,7 +281,7 @@ class PaginatedFetchMixin(MongoDBAPI):
             if "sess" in locals():
                 sess.close()
             self.log.info(
-                f"""Completed LogType: {log_type} Count: {count} Page: {kwargs['params']['pageNum'] if 'kwargs' in locals() else 'N/A'} starttime: {kwargs['params']['minDate'] if 'kwargs' in locals() else 'N/A'} endtime: {kwargs['params']['maxDate'] if 'kwargs' in locals() else 'N/A'}"""
+                f"""Completed LogType: {log_type} Count: {count} Page: {kwargs['params']['pageNum']} starttime: {kwargs['params']['minDate']} endtime: {kwargs['params']['maxDate']}"""
             )
 
 
@@ -341,6 +350,9 @@ class LogAPI(FetchMixin):
             return False, {}
 
     def transform_data(self, content):
+        # assuming file content is small so inmemory possible
+        # https://stackoverflow.com/questions/11914472/stringio-in-python3
+        # https://stackoverflow.com/questions/8858414/using-python-how-do-you-untar-purely-in-memory
         all_logs = []
         last_time_epoch = self.DEFAULT_START_TIME_EPOCH
         results = gzip.GzipFile(fileobj=BytesIO(content))
@@ -848,6 +860,9 @@ class OrgEventsAPI(PaginatedFetchMixin):
             return False, {}
 
     def transform_data(self, data):
+        # assuming file content is small so inmemory possible
+        # https://stackoverflow.com/questions/11914472/stringio-in-python3
+        # https://stackoverflow.com/questions/8858414/using-python-how-do-you-untar-purely-in-memory
         last_time_epoch = self.DEFAULT_START_TIME_EPOCH
         for obj in data["results"]:
             current_timestamp = convert_date_to_epoch(obj["created"])
@@ -899,6 +914,9 @@ class AlertsAPI(MongoDBAPI):
         }
 
     def transform_data(self, data):
+        # assuming file content is small so inmemory possible
+        # https://stackoverflow.com/questions/11914472/stringio-in-python3
+        # https://stackoverflow.com/questions/8858414/using-python-how-do-you-untar-purely-in-memory
         return data["results"], {
             "last_page_offset": len(data["results"])
             % self.api_config["PAGINATION_LIMIT"]
@@ -947,9 +965,11 @@ class AlertsAPI(MongoDBAPI):
                             )
                             current_state.update(updated_state)
                             if current_state["last_page_offset"] == 0:
+                                # do not increase if num alerts < page limit
                                 kwargs["params"]["pageNum"] += 1
                             else:
                                 has_next_page = False
+                            # time not available save current state new page num else continue
                             if (not self.is_time_remaining()) or (
                                 not has_next_page
                             ):
@@ -964,6 +984,7 @@ class AlertsAPI(MongoDBAPI):
                                     }
                                 )
                         else:
+                            # show err unable to send save current state
                             self.log.error(
                                 f"""Unable to send Project: {self.api_config['PROJECT_ID']} Alerts Page: {kwargs['params']['pageNum']} """
                             )
@@ -979,6 +1000,9 @@ class AlertsAPI(MongoDBAPI):
                         self.log.debug(
                             f"""Moving starttime window Project: {self.api_config['PROJECT_ID']} Alerts Page: {kwargs['params']['pageNum']} """
                         )
+                        # here send success is false
+                        # genuine no result window no change
+                        # page_num has finished increase window calc last_time_epoch  and add 1
                         self.save_state(
                             {
                                 "page_num": kwargs["params"]["pageNum"],
