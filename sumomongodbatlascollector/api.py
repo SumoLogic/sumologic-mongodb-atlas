@@ -6,10 +6,12 @@ import time
 from io import BytesIO
 
 from requests.auth import HTTPDigestAuth
-from sumoappclient.common.utils import (convert_date_to_epoch,
-                                        convert_epoch_to_utc_date,
-                                        convert_utc_date_to_epoch,
-                                        get_current_timestamp)
+from sumoappclient.common.utils import (
+    convert_date_to_epoch,
+    convert_epoch_to_utc_date,
+    convert_utc_date_to_epoch,
+    get_current_timestamp,
+)
 from sumoappclient.sumoclient.base import BaseAPI
 from sumoappclient.sumoclient.factory import OutputHandlerFactory
 from sumoappclient.sumoclient.httputils import ClientMixin
@@ -37,7 +39,9 @@ class MongoDBAPI(BaseAPI):
         MIN_REQUEST_WINDOW_LENGTH = 60
         MAX_REQUEST_WINDOW_LENGTH = 3600
 
-        while not (end_time_epoch - start_time_epoch > MIN_REQUEST_WINDOW_LENGTH):
+        while not (
+            end_time_epoch - start_time_epoch > MIN_REQUEST_WINDOW_LENGTH
+        ):
             time.sleep(MIN_REQUEST_WINDOW_LENGTH)
             end_time_epoch = (
                 get_current_timestamp()
@@ -49,11 +53,9 @@ class MongoDBAPI(BaseAPI):
 
         return start_time_epoch, end_time_epoch
 
-    @staticmethod
     def _get_cluster_name(self, full_name_with_cluster):
         return full_name_with_cluster.split("-shard")[0]
 
-    @staticmethod
     def _replace_cluster_name(self, full_name_with_cluster, cluster_mapping):
         cluster_name = self._get_cluster_name(full_name_with_cluster)
         cluster_alias = cluster_mapping.get(cluster_name, cluster_name)
@@ -92,15 +94,21 @@ class FetchMixin(MongoDBAPI):
                         f"""Successfully sent LogType: {self.get_key()} Data: {len(content)}"""
                     )
                 else:
-                    self.log.error(f"""Failed to send LogType: {self.get_key()}""")
+                    self.log.error(
+                        f"""Failed to send LogType: {self.get_key()}"""
+                    )
             elif fetch_success:
                 self.log.info(
                     f"""No results window LogType: {log_type} kwargs: {kwargs} status: {fetch_success}"""
                 )
-                is_move_fetch_window, new_state = self.check_move_fetch_window(kwargs)
+                is_move_fetch_window, new_state = self.check_move_fetch_window(
+                    kwargs
+                )
                 if is_move_fetch_window:
                     self.save_state(**new_state)
-                    self.log.debug(f"""Moving fetched window newstate: {new_state}""")
+                    self.log.debug(
+                        f"""Moving fetched window newstate: {new_state}"""
+                    )
             else:
                 self.log.error(
                     f"""Error LogType: {log_type} status: {fetch_success} reason: {content}"""
@@ -170,7 +178,9 @@ class PaginatedFetchMixin(MongoDBAPI):
                                         "end_time_epoch": convert_utc_date_to_epoch(
                                             kwargs["params"]["maxDate"]
                                         ),
-                                        "page_num": kwargs["params"]["pageNum"],
+                                        "page_num": kwargs["params"][
+                                            "pageNum"
+                                        ],
                                         "last_time_epoch": current_state[
                                             "last_time_epoch"
                                         ],
@@ -189,7 +199,9 @@ class PaginatedFetchMixin(MongoDBAPI):
                                         kwargs["params"]["maxDate"]
                                     ),
                                     "page_num": kwargs["params"]["pageNum"],
-                                    "last_time_epoch": current_state["last_time_epoch"],
+                                    "last_time_epoch": current_state[
+                                        "last_time_epoch"
+                                    ],
                                 }
                             )
                     else:
@@ -200,7 +212,9 @@ class PaginatedFetchMixin(MongoDBAPI):
                             self.save_state(
                                 {
                                     "page_num": 0,
-                                    "last_time_epoch": current_state["last_time_epoch"],
+                                    "last_time_epoch": current_state[
+                                        "last_time_epoch"
+                                    ],
                                 }
                             )
                         else:
@@ -234,7 +248,9 @@ class PaginatedFetchMixin(MongoDBAPI):
                                 kwargs["params"]["maxDate"]
                             ),
                             "page_num": kwargs["params"]["pageNum"],
-                            "last_time_epoch": current_state["last_time_epoch"],
+                            "last_time_epoch": current_state[
+                                "last_time_epoch"
+                            ],
                         }
                     )
                     self.log.error(
@@ -269,7 +285,9 @@ class LogAPI(FetchMixin):
         self.hostname = hostname
         self.filename = filename
         self.pathname = (
-            "db_logs.json" if "audit" not in self.filename else "db_auditlogs.json"
+            "db_logs.json"
+            if "audit" not in self.filename
+            else "db_auditlogs.json"
         )
         self.cluster_mapping = cluster_mapping
 
@@ -283,7 +301,7 @@ class LogAPI(FetchMixin):
 
     def get_state(self):
         key = self.get_key()
-        if key in self.kvstore:
+        if not self.kvstore.has_key(key):
             self.save_state(self.DEFAULT_START_TIME_EPOCH)
         return self.kvstore.get(key)
 
@@ -360,9 +378,13 @@ class LogAPI(FetchMixin):
             msg["hostname"] = hostname_alias
             msg["cluster_name"] = cluster_name
             current_date = (
-                msg["ts"]["$date"] if "audit" in self.filename else msg["t"]["$date"]
+                msg["ts"]["$date"]
+                if "audit" in self.filename
+                else msg["t"]["$date"]
             )
-            current_date_timestamp = convert_date_to_epoch(current_date.strip())
+            current_date_timestamp = convert_date_to_epoch(
+                current_date.strip()
+            )
             msg["created"] = current_date
             last_time_epoch = max(current_date_timestamp, last_time_epoch)
             all_logs.append(msg)
@@ -389,7 +411,7 @@ class ProcessMetricsAPI(FetchMixin):
 
     def get_state(self):
         key = self.get_key()
-        if key not in self.kvstore:
+        if not self.kvstore.has_key(key):
             self.save_state(self.DEFAULT_START_TIME_EPOCH)
         obj = self.kvstore.get(key)
         return obj
@@ -421,7 +443,9 @@ class ProcessMetricsAPI(FetchMixin):
 
     def build_send_params(self):
         return {
-            "extra_headers": {"Content-Type": "application/vnd.sumologic.carbon2"},
+            "extra_headers": {
+                "Content-Type": "application/vnd.sumologic.carbon2"
+            },
             "endpoint_key": "HTTP_METRICS_ENDPOINT",
             "jsondump": False,
         }
@@ -467,7 +491,9 @@ class DiskMetricsAPI(FetchMixin):
     date_format = "%Y-%m-%dT%H:%M:%SZ"
     pathname = "disk_metrics.log"
 
-    def __init__(self, kvstore, process_id, disk_name, config, cluster_mapping):
+    def __init__(
+        self, kvstore, process_id, disk_name, config, cluster_mapping
+    ):
         super(DiskMetricsAPI, self).__init__(kvstore, config)
         self.process_id = process_id
         self.disk_name = disk_name
@@ -484,7 +510,7 @@ class DiskMetricsAPI(FetchMixin):
 
     def get_state(self):
         key = self.get_key()
-        if key not in self.kvstore:
+        if not self.kvstore.has_key(key):
             self.save_state(self.DEFAULT_START_TIME_EPOCH)
         obj = self.kvstore.get(key)
         return obj
@@ -516,7 +542,9 @@ class DiskMetricsAPI(FetchMixin):
 
     def build_send_params(self):
         return {
-            "extra_headers": {"Content-Type": "application/vnd.sumologic.carbon2"},
+            "extra_headers": {
+                "Content-Type": "application/vnd.sumologic.carbon2"
+            },
             "endpoint_key": "HTTP_METRICS_ENDPOINT",
             "jsondump": False,
         }
@@ -562,7 +590,9 @@ class DatabaseMetricsAPI(FetchMixin):
     date_format = "%Y-%m-%dT%H:%M:%SZ"
     pathname = "database_metrics.log"
 
-    def __init__(self, kvstore, process_id, database_name, config, cluster_mapping):
+    def __init__(
+        self, kvstore, process_id, database_name, config, cluster_mapping
+    ):
         super(DatabaseMetricsAPI, self).__init__(kvstore, config)
         self.process_id = process_id
         self.database_name = database_name
@@ -579,7 +609,7 @@ class DatabaseMetricsAPI(FetchMixin):
 
     def get_state(self):
         key = self.get_key()
-        if key not in self.kvstore:
+        if not self.kvstore.has_key(key):
             self.save_state(self.DEFAULT_START_TIME_EPOCH)
         obj = self.kvstore.get(key)
         return obj
@@ -611,7 +641,9 @@ class DatabaseMetricsAPI(FetchMixin):
 
     def build_send_params(self):
         return {
-            "extra_headers": {"Content-Type": "application/vnd.sumologic.carbon2"},
+            "extra_headers": {
+                "Content-Type": "application/vnd.sumologic.carbon2"
+            },
             "endpoint_key": "HTTP_METRICS_ENDPOINT",
             "jsondump": False,
         }
@@ -665,7 +697,7 @@ class ProjectEventsAPI(PaginatedFetchMixin):
 
     def get_state(self):
         key = self.get_key()
-        if key not in self.kvstore:
+        if not self.kvstore.has_key(key):
             self.save_state(
                 {
                     "last_time_epoch": self.DEFAULT_START_TIME_EPOCH,
@@ -679,7 +711,9 @@ class ProjectEventsAPI(PaginatedFetchMixin):
     def build_fetch_params(self):
         state = self.get_state()
         if state["page_num"] == 0:
-            start_time_epoch, end_time_epoch = self.get_window(state["last_time_epoch"])
+            start_time_epoch, end_time_epoch = self.get_window(
+                state["last_time_epoch"]
+            )
             page_num = 1
         else:
             start_time_epoch = state["start_time_epoch"]
@@ -753,7 +787,7 @@ class OrgEventsAPI(PaginatedFetchMixin):
 
     def get_state(self):
         key = self.get_key()
-        if key not in self.kvstore:
+        if not self.kvstore.has_key(key):
             self.save_state(
                 {
                     "last_time_epoch": self.DEFAULT_START_TIME_EPOCH,
@@ -766,7 +800,9 @@ class OrgEventsAPI(PaginatedFetchMixin):
     def build_fetch_params(self):
         state = self.get_state()
         if state["page_num"] == 0:
-            start_time_epoch, end_time_epoch = self.get_window(state["last_time_epoch"])
+            start_time_epoch, end_time_epoch = self.get_window(
+                state["last_time_epoch"]
+            )
             page_num = 1
         else:
             start_time_epoch = state["start_time_epoch"]
@@ -836,7 +872,7 @@ class AlertsAPI(MongoDBAPI):
 
     def get_state(self):
         key = self.get_key()
-        if key not in self.kvstore:
+        if not self.kvstore.has_key(key):
             self.save_state({"page_num": 0, "last_page_offset": 0})
         return self.kvstore.get(key)
 
@@ -914,10 +950,14 @@ class AlertsAPI(MongoDBAPI):
                                 kwargs["params"]["pageNum"] += 1
                             else:
                                 has_next_page = False
-                            if (not self.is_time_remaining()) or (not has_next_page):
+                            if (not self.is_time_remaining()) or (
+                                not has_next_page
+                            ):
                                 self.save_state(
                                     {
-                                        "page_num": kwargs["params"]["pageNum"],
+                                        "page_num": kwargs["params"][
+                                            "pageNum"
+                                        ],
                                         "last_page_offset": current_state[
                                             "last_page_offset"
                                         ],
@@ -942,7 +982,9 @@ class AlertsAPI(MongoDBAPI):
                         self.save_state(
                             {
                                 "page_num": kwargs["params"]["pageNum"],
-                                "last_page_offset": current_state["last_page_offset"],
+                                "last_page_offset": current_state[
+                                    "last_page_offset"
+                                ],
                             }
                         )
                 else:

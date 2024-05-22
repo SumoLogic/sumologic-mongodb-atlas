@@ -9,9 +9,15 @@ from requests.auth import HTTPDigestAuth
 from sumoappclient.common.utils import get_current_timestamp
 from sumoappclient.sumoclient.base import BaseCollector
 from sumoappclient.sumoclient.httputils import ClientMixin
-
-from api import (AlertsAPI, DatabaseMetricsAPI, DiskMetricsAPI, LogAPI,
-                 OrgEventsAPI, ProcessMetricsAPI, ProjectEventsAPI)
+from api import (
+    AlertsAPI,
+    DatabaseMetricsAPI,
+    DiskMetricsAPI,
+    LogAPI,
+    OrgEventsAPI,
+    ProcessMetricsAPI,
+    ProjectEventsAPI,
+)
 
 
 class MongoDBAtlasCollector(BaseCollector):
@@ -70,11 +76,17 @@ class MongoDBAtlasCollector(BaseCollector):
             url = f"{self.api_config['BASE_URL']}/groups/{self.api_config['PROJECT_ID']}/processes/{process_id}/databases"
             kwargs = {
                 "auth": self.digestauth,
-                "params": {"itemsPerPage": self.api_config["PAGINATION_LIMIT"]},
+                "params": {
+                    "itemsPerPage": self.api_config["PAGINATION_LIMIT"]
+                },
             }
             all_data = self.getpaginateddata(url, **kwargs)
             database_names.extend(
-                [obj["databaseName"] for data in all_data for obj in data["results"]]
+                [
+                    obj["databaseName"]
+                    for data in all_data
+                    for obj in data["results"]
+                ]
             )
         return list(set(database_names))
 
@@ -88,8 +100,12 @@ class MongoDBAtlasCollector(BaseCollector):
             "params": {"itemsPerPage": self.api_config["PAGINATION_LIMIT"]},
         }
         all_data = self.getpaginateddata(url, **kwargs)
-        process_ids = [obj["id"] for data in all_data for obj in data["results"]]
-        hostnames = [obj["hostname"] for data in all_data for obj in data["results"]]
+        process_ids = [
+            obj["id"] for data in all_data for obj in data["results"]
+        ]
+        hostnames = [
+            obj["hostname"] for data in all_data for obj in data["results"]
+        ]
         # 'port': 27017, 'replicaSetName': 'M10AWSTestCluster-config-0', 'typeName': 'SHARD_CONFIG_PRIMARY'
         cluster_mapping = {
             self._get_cluster_name(obj["hostname"]): self._get_cluster_name(
@@ -107,11 +123,17 @@ class MongoDBAtlasCollector(BaseCollector):
             url = f"{self.api_config['BASE_URL']}/groups/{self.api_config['PROJECT_ID']}/processes/{process_id}/disks"
             kwargs = {
                 "auth": self.digestauth,
-                "params": {"itemsPerPage": self.api_config["PAGINATION_LIMIT"]},
+                "params": {
+                    "itemsPerPage": self.api_config["PAGINATION_LIMIT"]
+                },
             }
             all_data = self.getpaginateddata(url, **kwargs)
             disks.extend(
-                [obj["partitionName"] for data in all_data for obj in data["results"]]
+                [
+                    obj["partitionName"]
+                    for data in all_data
+                    for obj in data["results"]
+                ]
             )
         return list(set(disks))
 
@@ -158,15 +180,15 @@ class MongoDBAtlasCollector(BaseCollector):
         )
 
     def _get_database_names(self):
-        if "database_names" not in self.kvstore:
+        if not self.kvstore.has_key("database_names"):
             process_ids, _ = self._get_process_names()
             self._set_database_names(process_ids)
 
         current_timestamp = get_current_timestamp(milliseconds=True)
         databases = self.kvstore.get("database_names")
-        if current_timestamp - databases["last_set_date"] > self.DATA_REFRESH_TIME or (
-            len(databases["values"]) == 0
-        ):
+        if current_timestamp - databases[
+            "last_set_date"
+        ] > self.DATA_REFRESH_TIME or (len(databases["values"]) == 0):
             process_ids, _ = self._get_process_names()
             self._set_database_names(process_ids)
 
@@ -174,15 +196,15 @@ class MongoDBAtlasCollector(BaseCollector):
         return database_names
 
     def _get_disk_names(self):
-        if "disk_names" not in self.kvstore:
+        if not self.kvstore.has_key("disk_names"):
             process_ids, _ = self._get_process_names()
             self._set_disk_names(process_ids)
 
         current_timestamp = get_current_timestamp(milliseconds=True)
         disks = self.kvstore.get("disk_names")
-        if current_timestamp - disks["last_set_date"] > self.DATA_REFRESH_TIME or (
-            len(disks["values"]) == 0
-        ):
+        if current_timestamp - disks[
+            "last_set_date"
+        ] > self.DATA_REFRESH_TIME or (len(disks["values"]) == 0):
             process_ids, _ = self._get_process_names()
             self._set_disk_names(process_ids)
 
@@ -190,14 +212,14 @@ class MongoDBAtlasCollector(BaseCollector):
         return disk_names
 
     def _get_process_names(self):
-        if "processes" not in self.kvstore:
+        if not self.kvstore.has_key("processes"):
             self._set_processes()
 
         current_timestamp = get_current_timestamp(milliseconds=True)
         processes = self.kvstore.get("processes")
-        if current_timestamp - processes["last_set_date"] > self.DATA_REFRESH_TIME or (
-            len(processes["process_ids"]) == 0
-        ):
+        if current_timestamp - processes[
+            "last_set_date"
+        ] > self.DATA_REFRESH_TIME or (len(processes["process_ids"]) == 0):
             self._set_processes()
 
         processes = self.kvstore.get("processes")
@@ -224,7 +246,9 @@ class MongoDBAtlasCollector(BaseCollector):
         audit_files = ["mongodb-audit-log.gz", "mongos-audit-log.gz"]
         dblog_files = ["mongodb.gz", "mongos.gz"]
         process_ids, hostnames = self._get_process_names()
-        cluster_mapping = self.kvstore.get("cluster_mapping", {}).get("values", {})
+        cluster_mapping = self.kvstore.get("cluster_mapping", {}).get(
+            "values", {}
+        )
 
         try:
             if "LOG_TYPES" in self.api_config:
@@ -238,7 +262,7 @@ class MongoDBAtlasCollector(BaseCollector):
                                 self.config,
                                 cluster_mapping,
                             )
-                            del filename, hostname
+                            # del filename, hostname
 
                 if "AUDIT" in self.api_config["LOG_TYPES"]:
                     for filename in audit_files:
@@ -250,7 +274,7 @@ class MongoDBAtlasCollector(BaseCollector):
                                 self.config,
                                 cluster_mapping,
                             )
-                            del filename, hostname
+                            # del filename, hostname
 
                 if "EVENTS_PROJECT" in self.api_config["LOG_TYPES"]:
                     yield ProjectEventsAPI(self.kvstore, self.config)
@@ -270,7 +294,7 @@ class MongoDBAtlasCollector(BaseCollector):
                             self.config,
                             cluster_mapping,
                         )
-                        del process_id
+                        # del process_id
 
                 if self.api_config["METRIC_TYPES"].get("DISK_METRICS", []):
                     disk_names = self._get_disk_names()
@@ -283,7 +307,7 @@ class MongoDBAtlasCollector(BaseCollector):
                                 self.config,
                                 cluster_mapping,
                             )
-                            del process_id, disk_name
+                            # del process_id, disk_name
 
                 if self.api_config["METRIC_TYPES"].get("DATABASE_METRICS", []):
                     database_names = self._get_database_names()
@@ -296,7 +320,7 @@ class MongoDBAtlasCollector(BaseCollector):
                                 self.config,
                                 cluster_mapping,
                             )
-                            del process_id, database_name
+                            # del process_id, database_name
 
         except Exception as e:
             self.log.error(
@@ -322,50 +346,51 @@ class MongoDBAtlasCollector(BaseCollector):
                 task_params = list(task_params)
                 shuffle(task_params)
 
-                all_futures = {}
                 num_workers = self.config["Collection"]["NUM_WORKERS"]
                 self.log.debug(f"Spawning {num_workers} workers")
 
-                with futures.ThreadPoolExecutor(max_workers=num_workers) as executor:
-                    results = {
-                        executor.submit(apiobj.fetch): apiobj for apiobj in task_params
-                    }
-                    all_futures.update(results)
-
-                for future in futures.as_completed(all_futures):
-                    param = all_futures[future]
-                    api_type = str(param)
-                    try:
-                        result = future.result()
-                        del result
-                    except Exception as exc:
-                        self.log.error(
-                            f"API Type: {api_type} thread generated an exception: {exc}",
-                            exc_info=True,
+                batch_size = 5
+                with futures.ThreadPoolExecutor(
+                    max_workers=num_workers
+                ) as executor:
+                    for i in range(0, len(task_params), batch_size):
+                        batch_params = task_params[i : i + batch_size]
+                        results = (
+                            executor.submit(apiobj.fetch)
+                            for apiobj in batch_params
                         )
-                    else:
-                        self.log.info(f"API Type: {api_type} thread completed")
 
-                    del future
-                    del param
+                        for future in futures.as_completed(results):
+                            param = future.result()
+                            api_type = str(param)
+                            try:
+                                del param
+                            except Exception as exc:
+                                self.log.error(
+                                    f"API Type: {api_type} thread generated an exception: {exc}",
+                                    exc_info=True,
+                                )
+                            else:
+                                self.log.info(
+                                    f"API Type: {api_type} thread completed"
+                                )
 
-                all_futures.clear()
+                            del future
+
                 del task_params
 
             except Exception as e:
                 self.log.error(f"An error occurred: {e}", exc_info=True)
-
             finally:
                 self.stop_running()
                 self.mongosess.close()
                 del self.mongosess
-
         else:
             if not self.is_process_running(["sumomongodbatlascollector"]):
                 self.kvstore.release_lock_on_expired_key(
                     self.SINGLE_PROCESS_LOCK_KEY, expiry_min=10
                 )
-
+        
     def test(self):
         if self.is_running():
             task_params = self.build_task_params()
