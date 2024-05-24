@@ -8,7 +8,7 @@ from motor.motor_asyncio import AsyncIOMotorClient
 fake = Faker()
 
 # MongoDB connection
-client = AsyncIOMotorClient("mongodb+srv://prateek:prateek@cluster0.snvkl.mongodb.net/")
+client = AsyncIOMotorClient("mongo-connection-string")
 db = client["dummy_database"]
 collection1 = db["dummy_collection"]
 collection2 = db["dummy_collection_1"]
