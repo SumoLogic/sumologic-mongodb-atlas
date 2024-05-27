@@ -227,12 +227,8 @@ class MongoDBAtlasCollector(BaseCollector):
             processes["process_ids"],
             processes["hostnames"],
         )
-        process_ids_copy = process_ids.copy()
-        hostnames_copy = hostnames.copy()
 
-        del process_ids
-        del hostnames
-        return process_ids_copy, hostnames_copy
+        return process_ids, hostnames
 
     def is_running(self):
         self.log.debug("Acquiring single instance lock")
@@ -336,65 +332,40 @@ class MongoDBAtlasCollector(BaseCollector):
     def run(self):
         if self.is_running():
             try:
-                self.log.info("Starting MongoDB Atlas Forwarder...")
-                task_params = self.build_task_params()
-                task_params = list(task_params)
-                shuffle(task_params)
-
-                num_workers = self.config["Collection"]["NUM_WORKERS"]
-                self.log.debug(f"Spawning {num_workers} workers")
-
-                batch_size = 5
-                with futures.ThreadPoolExecutor(
-                    max_workers=num_workers
-                ) as executor:
-                    for i in range(0, len(task_params), batch_size):
-                        batch_params = task_params[i : i + batch_size]
-                        results = (
-                            executor.submit(apiobj.fetch)
-                            for apiobj in batch_params
-                        )
-
-                        for future in futures.as_completed(results):
-                            param = future.result()
-                            api_type = str(param)
-                            try:
-                                del param
-                            except Exception as exc:
-                                self.log.error(
-                                    f"API Type: {api_type} thread generated an exception: {exc}",
-                                    exc_info=True,
-                                )
-                            else:
-                                self.log.info(
-                                    f"API Type: {api_type} thread completed"
-                                )
-
-                            del future
-
-                del task_params
-
-            except Exception as e:
-                self.log.error(f"An error occurred: {e}", exc_info=True)
+                self.log.info('Starting MongoDB Atlas Forwarder...')
+                # task_params = self.build_task_params()
+                # shuffle(task_params)
+                all_futures = {}
+                self.log.debug("spawning %d workers" % self.config['Collection']['NUM_WORKERS'])
+                with futures.ThreadPoolExecutor(max_workers=self.config['Collection']['NUM_WORKERS']) as executor:
+                    results = {executor.submit(apiobj.fetch): apiobj for apiobj in self.build_task_params()}
+                    all_futures.update(results)
+                for future in futures.as_completed(all_futures):
+                    param = all_futures[future]
+                    api_type = str(param)
+                    try:
+                        future.result()
+                        obj = self.kvstore.get(api_type)
+                    except Exception as exc:
+                        self.log.error(f"API Type: {api_type} thread generated an exception: {exc}", exc_info=True)
+                    else:
+                        self.log.info(f"API Type: {api_type} thread completed {obj}")
             finally:
                 self.stop_running()
                 self.mongosess.close()
                 del self.mongosess
         else:
             if not self.is_process_running(["sumomongodbatlascollector"]):
-                self.kvstore.release_lock_on_expired_key(
-                    self.SINGLE_PROCESS_LOCK_KEY, expiry_min=10
-                )
+                self.kvstore.release_lock_on_expired_key(self.SINGLE_PROCESS_LOCK_KEY, expiry_min=10)
+
         
     def test(self):
         if self.is_running():
             task_params = self.build_task_params()
-            shuffle(task_params)
-            # print(task_params)
+            # shuffle(task_params)
             try:
                 for apiobj in task_params:
                     apiobj.fetch()
-                    # print(apiobj.__class__.__name__)
             finally:
                 self.stop_running()
 
