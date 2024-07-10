@@ -58,6 +58,11 @@ class MongoDBAtlasCollector(BaseCollector):
     def _get_cluster_name(self, fullname):
         return fullname.split("-shard")[0]
 
+    def _get_user_provided_cluster_name(self):
+        if self.collection_config and self.collection_config.get("Clusters"):
+            return self.collection_config.get("Clusters")
+        return []
+
     def _get_all_processes_from_project(self):
         url = f"{self.api_config['BASE_URL']}/groups/{self.api_config['PROJECT_ID']}/processes"
         kwargs = {'auth': self.digestauth, "params": {"itemsPerPage": self.api_config['PAGINATION_LIMIT']}}
@@ -65,7 +70,15 @@ class MongoDBAtlasCollector(BaseCollector):
         process_ids = [obj['id'] for data in all_data for obj in data['results']]
         hostnames = [obj['hostname'] for data in all_data for obj in data['results']]
         # 'port': 27017, 'replicaSetName': 'M10AWSTestCluster-config-0', 'typeName': 'SHARD_CONFIG_PRIMARY'
-        cluster_mapping = {self._get_cluster_name(obj['hostname']): self._get_cluster_name(obj['userAlias']) for data in all_data for obj in data['results']}
+        user_provided_clusters = self._get_user_provided_cluster_name()
+        cluster_mapping = {}
+        if len(user_provided_clusters) > 0:
+            for obj in all_data:
+                for obj in obj['results']:
+                    if obj['hostname'] in user_provided_clusters:
+                        cluster_mapping[self._get_cluster_name(obj['hostname'])] = self._get_cluster_name(obj['userAlias'])
+        else:
+            cluster_mapping = {self._get_cluster_name(obj['hostname']): self._get_cluster_name(obj['userAlias']) for data in all_data for obj in data['results']}
         hostnames = list(set(hostnames))
         return process_ids, hostnames, cluster_mapping
 
@@ -184,7 +197,6 @@ class MongoDBAtlasCollector(BaseCollector):
                 for process_id in process_ids:
                     for database_name in database_names:
                         tasks.append(DatabaseMetricsAPI(self.kvstore, process_id, database_name, self.config, cluster_mapping))
-
         self.log.info("%d Tasks Generated" % len(tasks))
         return tasks
 
@@ -195,8 +207,14 @@ class MongoDBAtlasCollector(BaseCollector):
                 task_params = self.build_task_params()
                 shuffle(task_params)
                 all_futures = {}
-                self.log.debug("spawning %d workers" % self.config['Collection']['NUM_WORKERS'])
-                with futures.ThreadPoolExecutor(max_workers=self.config['Collection']['NUM_WORKERS']) as executor:
+
+                NUM_WORKERS = self.config['Collection']['NUM_WORKERS']
+                # if user_provided_clusters are there then number of workers would be equal to number of clusters provided
+                user_provided_clusters = self._get_user_provided_cluster_name()
+                if len(user_provided_clusters) > 0:
+                    NUM_WORKERS = self._get_user_provided_cluster_name()
+                self.log.debug("spawning %d workers" % NUM_WORKERS)
+                with futures.ThreadPoolExecutor(max_workers=NUM_WORKERS) as executor:
                     results = {executor.submit(apiobj.fetch): apiobj for apiobj in task_params}
                     all_futures.update(results)
                 for future in futures.as_completed(all_futures):
