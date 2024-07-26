@@ -1,5 +1,7 @@
 # -*- coding: future_fstrings -*-
 
+import time
+import tracemalloc
 import traceback
 import os
 from concurrent import futures
@@ -149,6 +151,10 @@ class MongoDBAtlasCollector(BaseCollector):
         process_ids, hostnames = self._get_process_names()
         cluster_mapping = self.kvstore.get("cluster_mapping", {}).get("values", {})
 
+
+        tracemalloc.start()
+        start_time = time.time()
+        self.log.debug(f"API level logging started at {start_time}, memory usage: {tracemalloc.get_traced_memory()[0]} bytes")
         if 'LOG_TYPES' in self.api_config:
             if "DATABASE" in self.api_config['LOG_TYPES']:
                 filenames.extend(dblog_files)
@@ -196,8 +202,10 @@ class MongoDBAtlasCollector(BaseCollector):
                 shuffle(task_params)
                 all_futures = {}
                 self.log.debug("spawning %d workers" % self.config['Collection']['NUM_WORKERS'])
+                tracemalloc.start()
+                start_time = time.time()
                 with futures.ThreadPoolExecutor(max_workers=self.config['Collection']['NUM_WORKERS']) as executor:
-                    results = {executor.submit(apiobj.fetch): apiobj for apiobj in task_params}
+                    results = {executor.submit(self.execute_api_with_logging, apiobj): apiobj for apiobj in task_params}
                     all_futures.update(results)
                 for future in futures.as_completed(all_futures):
                     param = all_futures[future]
@@ -209,6 +217,12 @@ class MongoDBAtlasCollector(BaseCollector):
                         self.log.error(f"API Type: {api_type} thread generated an exception: {exc}", exc_info=True)
                     else:
                         self.log.info(f"API Type: {api_type} thread completed {obj}")
+                end_time = time.time()
+                _, peak_memory = tracemalloc.get_traced_memory()
+                tracemalloc.stop()
+
+                self.log.info(f"Total execution time: {end_time - start_time:.2f} seconds")
+                self.log.info(f"Peak memory usage: {peak_memory / 1024 / 1024:.2f} MB")
             finally:
                 self.stop_running()
                 self.mongosess.close()
@@ -216,6 +230,28 @@ class MongoDBAtlasCollector(BaseCollector):
             if not self.is_process_running(["sumomongodbatlascollector"]):
                 self.kvstore.release_lock_on_expired_key(self.SINGLE_PROCESS_LOCK_KEY, expiry_min=10)
 
+    def execute_api_with_logging(self, apiobj):
+        api_type = str(apiobj)
+        start_time = time.time()
+        start_memory = tracemalloc.get_traced_memory()[0]
+        try:
+            result = apiobj.fetch()
+        except Exception as exc:
+            self.log.error(f"Exception occurred while fetching API Type: {api_type} - {exc}", exc_info=True)
+            raise
+        finally:
+            end_time = time.time()
+            end_memory = tracemalloc.get_traced_memory()[0]
+            
+            execution_time = end_time - start_time
+            memory_used = end_memory - start_memory
+            
+            self.log.info(f"API Type: {api_type}")
+            self.log.info(f"Execution time: {execution_time:.2f} seconds")
+            self.log.info(f"Memory used: {memory_used / 1024:.2f} KB")
+        
+        return result
+		
     def test(self):
         if self.is_running():
             task_params = self.build_task_params()
