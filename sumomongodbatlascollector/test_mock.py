@@ -1,5 +1,7 @@
 import gzip
 import json
+import pytest
+import time
 from unittest.mock import Mock, patch
 
 from sumoappclient.sumoclient.api import (
@@ -591,3 +593,149 @@ def test_project_events_api(
     assert transformed_data[0]["eventType"] == "TEST_EVENT"
     assert transformed_data[0]["id"] == "test-event-id"
     assert state == {"last_time_epoch": 1627257600}
+
+
+@pytest.mark.parametrize("num_records", [10000, 100000, 1000000])
+@patch("sumoappclient.sumoclient.factory.OutputHandlerFactory")
+@patch("sumoappclient.sumoclient.httputils.ClientMixin")
+def test_log_api_load(mock_client_mixin, mock_output_handler_factory, num_records):
+    mock_kvstore = Mock()
+    mock_config = {
+        "MongoDBAtlas": {
+            "PROJECT_ID": "test_project",
+            "BASE_URL": "http://localhost:8247",
+        }
+    }
+    mock_cluster_mapping = {"test-cluster": "alias"}
+
+    log_api = LogAPI(
+        mock_kvstore, "test-hostname", "mongodb.log", mock_config, mock_cluster_mapping
+    )
+
+    bulk_data = [
+        {
+            "t": {"$date": f"2023-07-26T12:00:{i:02d}.000Z"},
+            "msg": f"Test log message {i}",
+        }
+        for i in range(num_records)
+    ]
+
+    mock_client_mixin.make_request.return_value = (True, bulk_data)
+
+    start_time = time.time()
+    log_api.fetch()
+    end_time = time.time()
+
+    execution_time = end_time - start_time
+
+    print(f"Log API load test results for {num_records} records:")
+    print(f"Execution time: {execution_time:.2f} seconds")
+
+    assert (
+        execution_time < 300
+    ), f"Processing {num_records} log records took more than 5 minutes"
+
+
+@pytest.mark.parametrize("num_records", [10000, 100000, 1000000])
+@patch("sumoappclient.sumoclient.factory.OutputHandlerFactory")
+@patch("sumoappclient.sumoclient.httputils.ClientMixin")
+def test_process_metrics_api_load(
+    mock_client_mixin, mock_output_handler_factory, num_records
+):
+    mock_kvstore = Mock()
+    mock_config = {
+        "MongoDBAtlas": {
+            "PROJECT_ID": "test_project",
+            "BASE_URL": "http://localhost:8247",
+            "PAGINATION_LIMIT": 100,
+            "METRIC_TYPES": {"PROCESS_METRICS": ["metric1", "metric2"]},
+        }
+    }
+    mock_cluster_mapping = {"test-cluster": "alias"}
+
+    process_metrics_api = ProcessMetricsAPI(
+        mock_kvstore, "test-process-id", mock_config, mock_cluster_mapping
+    )
+
+    bulk_data = {
+        "measurements": [
+            {
+                "name": "metric1",
+                "units": "MB",
+                "dataPoints": [
+                    {"timestamp": f"2023-07-26T{i//60:02d}:{i%60:02d}:00Z", "value": i}
+                    for i in range(num_records)
+                ],
+            }
+        ],
+        "hostId": "test-cluster-host",
+        "processId": "test-cluster-process",
+        "groupId": "test_project",
+    }
+
+    mock_client_mixin.make_request.return_value = (True, bulk_data)
+
+    start_time = time.time()
+    process_metrics_api.fetch()
+    end_time = time.time()
+
+    execution_time = end_time - start_time
+    print(f"Process Metrics API load test results for {num_records} records:")
+    print(f"Execution time: {execution_time:.2f} seconds")
+
+    # Modify the time range to verify assertion
+    assert (
+        execution_time < 300
+    ), f"Processing {num_records} process metric records took more than 5 minutes"
+
+
+@pytest.mark.parametrize("num_records", [10000, 100000, 1000000])
+@patch("sumoappclient.sumoclient.factory.OutputHandlerFactory")
+@patch("sumoappclient.sumoclient.httputils.ClientMixin")
+def test_disk_metrics_api_load(
+    mock_client_mixin, mock_output_handler_factory, num_records
+):
+    mock_kvstore = Mock()
+    mock_config = {
+        "MongoDBAtlas": {
+            "PROJECT_ID": "test_project",
+            "BASE_URL": "http://localhost:8247",
+            "PAGINATION_LIMIT": 100,
+            "METRIC_TYPES": {"DISK_METRICS": ["disk_metric1", "disk_metric2"]},
+        }
+    }
+    mock_cluster_mapping = {"test-cluster": "alias"}
+
+    disk_metrics_api = DiskMetricsAPI(
+        mock_kvstore, "test-process-id", "test-disk", mock_config, mock_cluster_mapping
+    )
+
+    bulk_data = {
+        "measurements": [
+            {
+                "name": "disk_metric1",
+                "units": "GB",
+                "dataPoints": [
+                    {"timestamp": f"2023-07-26T{i//60:02d}:{i%60:02d}:00Z", "value": i}
+                    for i in range(num_records)
+                ],
+            }
+        ],
+        "hostId": "test-cluster-host",
+        "processId": "test-cluster-process",
+        "groupId": "test_project",
+        "partitionName": "test-disk",
+    }
+
+    mock_client_mixin.make_request.return_value = (True, bulk_data)
+    start_time = time.time()
+    disk_metrics_api.fetch()
+    end_time = time.time()
+
+    execution_time = end_time - start_time
+    print(f"Disk Metrics API load test results for {num_records} records:")
+    print(f"Execution time: {execution_time:.2f} seconds")
+
+    assert (
+        execution_time < 300
+    ), f"Processing {num_records} disk metric records took more than 5 minutes"
