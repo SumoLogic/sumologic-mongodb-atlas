@@ -1,6 +1,7 @@
 import gzip
 import json
 import pytest
+import tracemalloc
 import time
 from unittest.mock import Mock, patch
 
@@ -622,18 +623,35 @@ def test_log_api_load(mock_client_mixin, mock_output_handler_factory, num_record
 
     mock_client_mixin.make_request.return_value = (True, bulk_data)
 
+    tracemalloc.start()
+
     start_time = time.time()
     log_api.fetch()
     end_time = time.time()
+
+    current, peak = tracemalloc.get_traced_memory()
+
+    tracemalloc.stop()
 
     execution_time = end_time - start_time
 
     print(f"Log API load test results for {num_records} records:")
     print(f"Execution time: {execution_time:.2f} seconds")
+    print(f"Current memory usage: {current / 10**6:.2f} MB")
+    print(f"Peak memory usage: {peak / 10**6:.2f} MB")
+
+    snapshot = tracemalloc.take_snapshot()
+    top_stats = snapshot.statistics("lineno")
+    print("Top 10 lines for memory usage:")
+    for stat in top_stats[:10]:
+        print(stat)
 
     assert (
         execution_time < 300
     ), f"Processing {num_records} log records took more than 5 minutes"
+    assert (
+        peak / 10**6 < 4096
+    ), f"Memory usage exceeded 4GB while processing {num_records} log records"
 
 
 @pytest.mark.parametrize("num_records", [10000, 100000, 1000000])
@@ -675,18 +693,35 @@ def test_process_metrics_api_load(
 
     mock_client_mixin.make_request.return_value = (True, bulk_data)
 
+    tracemalloc.start()
+
     start_time = time.time()
     process_metrics_api.fetch()
     end_time = time.time()
 
+    current, peak = tracemalloc.get_traced_memory()
+
+    tracemalloc.stop()
+
     execution_time = end_time - start_time
+
     print(f"Process Metrics API load test results for {num_records} records:")
     print(f"Execution time: {execution_time:.2f} seconds")
+    print(f"Current memory usage: {current / 10**6:.2f} MB")
+    print(f"Peak memory usage: {peak / 10**6:.2f} MB")
 
-    # Modify the time range to verify assertion
+    snapshot = tracemalloc.take_snapshot()
+    top_stats = snapshot.statistics("lineno")
+    print("Top 10 lines for memory usage:")
+    for stat in top_stats[:10]:
+        print(stat)
+
     assert (
         execution_time < 300
     ), f"Processing {num_records} process metric records took more than 5 minutes"
+    assert (
+        peak / 10**6 < 4096
+    ), f"Memory usage exceeded 4GB while processing {num_records} process metric records"
 
 
 @pytest.mark.parametrize("num_records", [10000, 100000, 1000000])
@@ -728,14 +763,32 @@ def test_disk_metrics_api_load(
     }
 
     mock_client_mixin.make_request.return_value = (True, bulk_data)
+
+    tracemalloc.start()
+
     start_time = time.time()
     disk_metrics_api.fetch()
     end_time = time.time()
 
+    current, peak = tracemalloc.get_traced_memory()
+
+    tracemalloc.stop()
+
     execution_time = end_time - start_time
     print(f"Disk Metrics API load test results for {num_records} records:")
     print(f"Execution time: {execution_time:.2f} seconds")
+    print(f"Current memory usage: {current / 10**6:.2f} MB")
+    print(f"Peak memory usage: {peak / 10**6:.2f} MB")
+
+    snapshot = tracemalloc.take_snapshot()
+    top_stats = snapshot.statistics("lineno")
+    print("Top 10 lines for memory usage:")
+    for stat in top_stats[:10]:
+        print(stat)
 
     assert (
         execution_time < 300
     ), f"Processing {num_records} disk metric records took more than 5 minutes"
+    assert (
+        peak / 10**6 < 4096
+    ), f"Memory usage exceeded 4GB while processing {num_records} disk metric records"
