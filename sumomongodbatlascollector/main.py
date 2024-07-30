@@ -1,4 +1,4 @@
-# -*- coding: utf-8 -*-
+# -*- coding: future_fstrings -*-
 
 import time
 import tracemalloc
@@ -165,7 +165,6 @@ class MongoDBAtlasCollector(BaseCollector):
         cluster_mapping = self.kvstore.get("cluster_mapping", {}).get("values", {})
 
 
-        tracemalloc.start()
         start_time = time.time()
         self.log.debug(f"API level logging started at {start_time}, memory usage: {tracemalloc.get_traced_memory()[0]} bytes")
         if 'LOG_TYPES' in self.api_config:
@@ -243,7 +242,7 @@ class MongoDBAtlasCollector(BaseCollector):
                 self.kvstore.release_lock_on_expired_key(self.SINGLE_PROCESS_LOCK_KEY, expiry_min=10)
 
     def execute_api_with_logging(self, apiobj):
-        api_type = str(apiobj)
+        api_type = str(apiobj.__class__.__name__)
         start_time = time.time()
         start_memory = tracemalloc.get_traced_memory()[0]
         try:
@@ -268,7 +267,6 @@ class MongoDBAtlasCollector(BaseCollector):
         if self.is_running():
             task_params = self.build_task_params()
             shuffle(task_params)
-            # print(task_params)
             try:
                 for apiobj in task_params:
                     apiobj.fetch()

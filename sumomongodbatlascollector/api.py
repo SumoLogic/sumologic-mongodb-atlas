@@ -1,4 +1,4 @@
-# -*- coding: utf-8 -*-
+# -*- coding: future_fstrings -*-
 
 import gzip
 import json
@@ -51,7 +51,7 @@ class MongoDBAPI(BaseAPI):
 
     def _get_current_process_memory_usage(self):
         process = psutil.Process(os.getpid())
-        mem_info = process.memory_info() 
+        mem_info = process.memory_info()
         return f'{mem_info.rss / 1024:.2f} KB'
 
 
