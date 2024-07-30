@@ -2,6 +2,9 @@
 
 import gzip
 import json
+import os
+import psutil
+import tracemalloc
 from io import BytesIO
 import time
 from requests.auth import HTTPDigestAuth
@@ -20,21 +23,21 @@ class MongoDBAPI(BaseAPI):
     def __init__(self, kvstore, config):
         super(MongoDBAPI, self).__init__(kvstore, config)
         self.api_config = self.config['MongoDBAtlas']
+        self.MAX_REQUEST_WINDOW_LENGTH = self.api_config['Collection']['MAX_REQUEST_WINDOW_LENGTH'] if self.api_config['Collection']['MAX_REQUEST_WINDOW_LENGTH'] else 3600
+        self.MIN_REQUEST_WINDOW_LENGTH = self.api_config['Collection']['MIN_REQUEST_WINDOW_LENGTH'] if self.api_config['Collection']['MIN_REQUEST_WINDOW_LENGTH'] else 60
         self.digestauth = HTTPDigestAuth(username=self.api_config['PUBLIC_API_KEY'], password=self.api_config['PRIVATE_API_KEY'])
 
     def get_window(self, last_time_epoch):
         start_time_epoch = last_time_epoch + self.MOVING_WINDOW_DELTA
         end_time_epoch = get_current_timestamp() - self.collection_config['END_TIME_EPOCH_OFFSET_SECONDS']
-        MIN_REQUEST_WINDOW_LENGTH = 60
-        MAX_REQUEST_WINDOW_LENGTH = 3600
 
-        while not (end_time_epoch - start_time_epoch > MIN_REQUEST_WINDOW_LENGTH):
+        while not (end_time_epoch - start_time_epoch > self.MIN_REQUEST_WINDOW_LENGTH):
             # initially last_time_epoch is same as current_time_stamp so endtime becomes lesser than starttime
-            time.sleep(MIN_REQUEST_WINDOW_LENGTH)
+            time.sleep(self.MIN_REQUEST_WINDOW_LENGTH)
             end_time_epoch = get_current_timestamp() - self.collection_config['END_TIME_EPOCH_OFFSET_SECONDS']
 
-        if ((end_time_epoch - start_time_epoch) > MAX_REQUEST_WINDOW_LENGTH):
-            end_time_epoch = start_time_epoch + MAX_REQUEST_WINDOW_LENGTH
+        if ((end_time_epoch - start_time_epoch) > self.MAX_REQUEST_WINDOW_LENGTH):
+            end_time_epoch = start_time_epoch + self.MAX_REQUEST_WINDOW_LENGTH
 
         return start_time_epoch, end_time_epoch
 
@@ -45,6 +48,12 @@ class MongoDBAPI(BaseAPI):
         cluster_name = self._get_cluster_name(full_name_with_cluster)
         cluster_alias = cluster_mapping.get(cluster_name, cluster_name)
         return full_name_with_cluster.replace(cluster_name, cluster_alias)
+
+    def _get_current_process_memory_usage(self):
+        process = psutil.Process(os.getpid())
+        mem_info = process.memory_info() 
+        return f'{mem_info.rss / 1024:.2f} KB'
+
 
 
 class FetchMixin(MongoDBAPI):
@@ -57,7 +66,6 @@ class FetchMixin(MongoDBAPI):
         state = None
         payload = []
         try:
-
             fetch_success, content = ClientMixin.make_request(url, method="get", logger=self.log, TIMEOUT=self.collection_config['TIMEOUT'], MAX_RETRY=self.collection_config['MAX_RETRY'], BACKOFF_FACTOR=self.collection_config['BACKOFF_FACTOR'], **kwargs)
             if fetch_success and len(content) > 0:
                 payload, state = self.transform_data(content)
@@ -70,12 +78,13 @@ class FetchMixin(MongoDBAPI):
                 else:
                     self.log.error(f'''Failed to send LogType: {self.get_key()}''')
             elif fetch_success and len(content) == 0:
-                self.log.info(f'''No results window LogType: {log_type} kwargs: {kwargs} status: {fetch_success}''')
+                self.log.info(f'''No results window LogType: {log_type} kwargs: {kwargs} status: {fetch_success} url: {url}''')
                 is_move_fetch_window, new_state = self.check_move_fetch_window(kwargs)
                 if is_move_fetch_window:
                     self.save_state(**new_state)
                     self.log.debug(f'''Moving fetched window newstate: {new_state}''')
             else:
+                self.log.info(f'''No results window LogType: {log_type} kwargs: {kwargs} status: {fetch_success} url: {url}''')
                 self.log.error(f'''Error LogType: {log_type} status: {fetch_success} reason: {content}''')
         finally:
             output_handler.close()
@@ -92,11 +101,14 @@ class PaginatedFetchMixin(MongoDBAPI):
         next_request = True
         count = 0
         sess = ClientMixin.get_new_session()
-        self.log.info(f'''Fetching LogType: {log_type}  starttime: {kwargs['params']['minDate']} endtime: {kwargs['params']['maxDate']}''')
+        self.log.info(f'''Fetching LogType: {log_type}  starttime: {kwargs['params']['minDate']} endtime: {kwargs['params']['maxDate']} url: {url}''')
         try:
             while next_request:
                 send_success = has_next_page = False
+                start_time = time.time()
                 status, data = ClientMixin.make_request(url, method="get", session=sess, logger=self.log, TIMEOUT=self.collection_config['TIMEOUT'], MAX_RETRY=self.collection_config['MAX_RETRY'], BACKOFF_FACTOR=self.collection_config['BACKOFF_FACTOR'], **kwargs)
+                end_time = time.time()
+                self.log.info(f'''Fetching LogType: {log_type}  starttime: {kwargs['params']['minDate']} endtime: {kwargs['params']['maxDate']} url: {url} execution time: {end_time - start_time:.2f} seconds current_process_memory_usage: {self._get_current_process_memory_usage()}''')
                 fetch_success = status and "results" in data
                 if fetch_success:
                     has_next_page = len(data['results']) > 0
