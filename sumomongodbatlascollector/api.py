@@ -13,6 +13,7 @@ from sumoappclient.sumoclient.base import BaseAPI
 from sumoappclient.sumoclient.factory import OutputHandlerFactory
 from sumoappclient.common.utils import get_current_timestamp, convert_epoch_to_utc_date, convert_utc_date_to_epoch, convert_date_to_epoch
 from sumoappclient.sumoclient.httputils import ClientMixin
+from time_and_memory_tracker import track_time_and_memory, TimeAndMemoryTracker
 
 
 class MongoDBAPI(BaseAPI):
@@ -23,8 +24,8 @@ class MongoDBAPI(BaseAPI):
     def __init__(self, kvstore, config):
         super(MongoDBAPI, self).__init__(kvstore, config)
         self.api_config = self.config['MongoDBAtlas']
-        self.MAX_REQUEST_WINDOW_LENGTH = self.api_config['Collection']['MAX_REQUEST_WINDOW_LENGTH'] if self.api_config['Collection']['MAX_REQUEST_WINDOW_LENGTH'] else 3600
-        self.MIN_REQUEST_WINDOW_LENGTH = self.api_config['Collection']['MIN_REQUEST_WINDOW_LENGTH'] if self.api_config['Collection']['MIN_REQUEST_WINDOW_LENGTH'] else 60
+        self.MAX_REQUEST_WINDOW_LENGTH = self.api_config.get('Collection',{}).get('MAX_REQUEST_WINDOW_LENGTH', 3600)
+        self.MIN_REQUEST_WINDOW_LENGTH = self.api_config.get('Collection',{}).get('MIN_REQUEST_WINDOW_LENGTH', 60)
         self.digestauth = HTTPDigestAuth(username=self.api_config['PUBLIC_API_KEY'], password=self.api_config['PRIVATE_API_KEY'])
 
     def get_window(self, last_time_epoch):
@@ -60,18 +61,22 @@ class FetchMixin(MongoDBAPI):
 
     def fetch(self):
         log_type = self.get_key()
-        output_handler = OutputHandlerFactory.get_handler(self.collection_config['OUTPUT_HANDLER'], path=self.pathname, config=self.config)
-        url, kwargs = self.build_fetch_params()
-        self.log.info(f'''Fetching LogType: {log_type} kwargs: {kwargs}''')
+        with TimeAndMemoryTracker(self.log, "OutputHandlerFactory.get_handler", url=url, log_type=log_type, kwargs=kwargs):
+            output_handler = OutputHandlerFactory.get_handler(self.collection_config['OUTPUT_HANDLER'], path=self.pathname, config=self.config)
+        
+        with TimeAndMemoryTracker(self.log, "build_fetch_parsm", url = url, log_type = log_type, kwargs=kwargs):
+            url, kwargs = self.build_fetch_params()
         state = None
         payload = []
         try:
-            fetch_success, content = ClientMixin.make_request(url, method="get", logger=self.log, TIMEOUT=self.collection_config['TIMEOUT'], MAX_RETRY=self.collection_config['MAX_RETRY'], BACKOFF_FACTOR=self.collection_config['BACKOFF_FACTOR'], **kwargs)
+            with TimeAndMemoryTracker(self.log, "ClientMixin.make_request", url = url, log_type = log_type, kwargs=kwargs):
+                fetch_success, content = ClientMixin.make_request(url, method="get", logger=self.log, TIMEOUT=self.collection_config['TIMEOUT'], MAX_RETRY=self.collection_config['MAX_RETRY'], BACKOFF_FACTOR=self.collection_config['BACKOFF_FACTOR'], **kwargs)
             if fetch_success and len(content) > 0:
                 payload, state = self.transform_data(content)
                 #Todo Make this atomic if after sending -> Ctrl - C happens then it fails to save state
                 params = self.build_send_params()
-                send_success = output_handler.send(payload, **params)
+                with TimeAndMemoryTracker(self.log, "output_handler.send", url=url, log_type=log_type, kwargs=kwargs):
+                    send_success = output_handler.send(payload, **params)
                 if send_success:
                     self.save_state(**state)
                     self.log.info(f'''Successfully sent LogType: {self.get_key()} Data: {len(content)}''')
@@ -84,8 +89,7 @@ class FetchMixin(MongoDBAPI):
                     self.save_state(**new_state)
                     self.log.debug(f'''Moving fetched window newstate: {new_state}''')
             else:
-                self.log.info(f'''No results window LogType: {log_type} kwargs: {kwargs} status: {fetch_success} url: {url}''')
-                self.log.error(f'''Error LogType: {log_type} status: {fetch_success} reason: {content}''')
+                self.log.error(f'''Error LogType: {log_type} status: {fetch_success} reason: {content} kwargs: {kwargs} url: {url}''')
         finally:
             output_handler.close()
             self.log.info(f'''Completed LogType: {log_type} curstate: {state} datasent: {len(payload)}''')
@@ -95,27 +99,27 @@ class PaginatedFetchMixin(MongoDBAPI):
 
     def fetch(self):
         current_state = self.get_state()
-        output_handler = OutputHandlerFactory.get_handler(self.collection_config['OUTPUT_HANDLER'], path=self.pathname, config=self.config)
+        with TimeAndMemoryTracker(self.log, "OutputHandlerFactory.get_handler"):
+            output_handler = OutputHandlerFactory.get_handler(self.collection_config['OUTPUT_HANDLER'], path=self.pathname, config=self.config)
         url, kwargs = self.build_fetch_params()
         log_type = self.get_key()
         next_request = True
         count = 0
-        sess = ClientMixin.get_new_session()
-        self.log.info(f'''Fetching LogType: {log_type}  starttime: {kwargs['params']['minDate']} endtime: {kwargs['params']['maxDate']} url: {url}''')
+        with TimeAndMemoryTracker(self.log, "ClientMixin.get_new_session", url=url, log_type=log_type, kwargs=kwargs):
+            sess = ClientMixin.get_new_session()
         try:
             while next_request:
                 send_success = has_next_page = False
-                start_time = time.time()
-                status, data = ClientMixin.make_request(url, method="get", session=sess, logger=self.log, TIMEOUT=self.collection_config['TIMEOUT'], MAX_RETRY=self.collection_config['MAX_RETRY'], BACKOFF_FACTOR=self.collection_config['BACKOFF_FACTOR'], **kwargs)
-                end_time = time.time()
-                self.log.info(f'''Fetching LogType: {log_type}  starttime: {kwargs['params']['minDate']} endtime: {kwargs['params']['maxDate']} url: {url} execution time: {end_time - start_time:.2f} seconds current_process_memory_usage: {self._get_current_process_memory_usage()}''')
+                with TimeAndMemoryTracker(self.log, "ClientMixin.make_request", url=url, log_type=log_type, kwargs=kwargs):
+                    status, data = ClientMixin.make_request(url, method="get", session=sess, logger=self.log, TIMEOUT=self.collection_config['TIMEOUT'], MAX_RETRY=self.collection_config['MAX_RETRY'], BACKOFF_FACTOR=self.collection_config['BACKOFF_FACTOR'], **kwargs)
                 fetch_success = status and "results" in data
                 if fetch_success:
                     has_next_page = len(data['results']) > 0
                     if has_next_page:
                         payload, updated_state = self.transform_data(data)
                         params = self.build_send_params()
-                        send_success = output_handler.send(payload, **params)
+                        with TimeAndMemoryTracker(self.log, "output_handler.send", url=url, log_type=log_type, kwargs=kwargs):
+                            send_success = output_handler.send(payload, **params)
                         if send_success:
                             count +=1
                             self.log.debug(f'''Successfully sent LogType: {log_type} Page: {kwargs['params']['pageNum']}  Datalen: {len(payload)} starttime: {kwargs['params']['minDate']} endtime: {kwargs['params']['maxDate']}''')
