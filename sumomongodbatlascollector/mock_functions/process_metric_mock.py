@@ -2,6 +2,7 @@ import json
 from datetime import datetime, timedelta
 import random
 
+
 def process_metric_mock():
     current_time = datetime.utcnow()
     end_time = current_time.replace(second=0, microsecond=0)
@@ -12,11 +13,13 @@ def process_metric_mock():
         for i in range(6):
             timestamp = start_time + timedelta(minutes=i)
             value = start_value + (end_value - start_value) * i / 5
-            value += random.uniform(-value*0.1, value*0.1)
-            datapoints.append({
-                "timestamp": timestamp.strftime("%Y-%m-%dT%H:%M:%SZ"),
-                "value": round(value, 2)
-            })
+            value += random.uniform(-value * 0.1, value * 0.1)
+            datapoints.append(
+                {
+                    "timestamp": timestamp.strftime("%Y-%m-%dT%H:%M:%SZ"),
+                    "value": round(value, 2),
+                }
+            )
         return datapoints
 
     mock_response = {
@@ -28,26 +31,27 @@ def process_metric_mock():
         "links": [
             {
                 "href": "https://cloud.mongodb.com/api/atlas/v1.0/groups/32b6e34b3d91647abb20e7b8/processes/cluster0-shard-00-00.mongodb.net:27017/measurements",
-                "rel": "self"
+                "rel": "self",
             }
         ],
         "measurements": [
             {
                 "dataPoints": generate_datapoints(1024, 3072),
                 "name": "CACHE_BYTES_READ_INTO",
-                "units": "BYTES"
+                "units": "BYTES",
             },
             {
                 "dataPoints": generate_datapoints(50, 65),
                 "name": "CONNECTIONS",
-                "units": "SCALAR"
-            }
+                "units": "SCALAR",
+            },
         ],
         "partitionName": "P0",
         "processId": "cluster0-shard-00-00.mongodb.net:27017",
-        "start": start_time.strftime("%Y-%m-%dT%H:%M:%SZ")
+        "start": start_time.strftime("%Y-%m-%dT%H:%M:%SZ"),
     }
 
     return json.dumps(mock_response, indent=2)
+
 
 # print(get_mock_mongodb_metrics())
