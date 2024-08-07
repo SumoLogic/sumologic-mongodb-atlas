@@ -1,2 +1,2 @@
 sumologic-appclient-sdk==2.0.10
-requests>=2.32.2
+requests>=2.32.3
