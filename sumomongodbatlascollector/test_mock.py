@@ -6,12 +6,12 @@ import time
 from unittest.mock import Mock, patch
 
 from api import (
-    AlertsAPI,
+    # AlertsAPI,
     DatabaseMetricsAPI,
     DiskMetricsAPI,
     FetchMixin,
     LogAPI,
-    OrgEventsAPI,
+    # OrgEventsAPI,
     PaginatedFetchMixin,
     ProcessMetricsAPI,
     ProjectEventsAPI,
@@ -36,8 +36,7 @@ def test_mongodb_api(mock_base_api):
 
     assert api._get_cluster_name("test-cluster-shard-0") == "test-cluster"
     assert (
-        api._replace_cluster_name("test-cluster-shard-0", {"test-cluster": "alias"})
-        == "alias-shard-0"
+        api._replace_cluster_name("test-cluster-shard-0", {"test-cluster": "alias"}) == "alias-shard-0"
     )
 
 
@@ -145,8 +144,7 @@ def test_log_api(mock_client_mixin, mock_output_handler_factory, mock_base_api):
     log_api.get_window = Mock(return_value=(1000000, 2000000))
     url, params = log_api.build_fetch_params()
     assert (
-        url
-        == "http://localhost:8247/groups/test_project/clusters/test-hostname/logs/mongodb.log"
+        url == "http://localhost:8247/groups/test_project/clusters/test-hostname/logs/mongodb.log"
     )
     assert params["params"] == {"startDate": 1000000, "endDate": 2000000}
 
@@ -163,7 +161,7 @@ def test_log_api(mock_client_mixin, mock_output_handler_factory, mock_base_api):
         result, state = log_api.check_move_fetch_window(
             {"params": {"endDate": 1500000}}
         )
-        assert result == True
+        assert result is True
         assert state == {"last_time_epoch": 1500000}
 
     sample_log = {"t": {"$date": "2023-07-26T12:00:00.000Z"}, "msg": "Test log message"}
@@ -237,8 +235,7 @@ def test_process_metrics_api(
         process_metrics_api.get_window = Mock(return_value=(1000000, 2000000))
         url, params = process_metrics_api.build_fetch_params()
         assert (
-            url
-            == "http://localhost:8247/groups/test_project/processes/test-process-id/measurements"
+            url == "http://localhost:8247/groups/test_project/processes/test-process-id/measurements"
         )
         assert params["params"]["start"] == "2023-07-26T00:00:00Z"
         assert params["params"]["end"] == "2023-07-26T01:00:00Z"
@@ -262,7 +259,7 @@ def test_process_metrics_api(
             result, state = process_metrics_api.check_move_fetch_window(
                 {"params": {"end": "2023-07-26T01:00:00Z"}}
             )
-            assert result == True
+            assert result is True
             assert state == {"last_time_epoch": 1500000}
 
     sample_data = {
@@ -340,8 +337,7 @@ def test_disk_metrics_api(
         disk_metrics_api.get_window = Mock(return_value=(1000000, 2000000))
         url, params = disk_metrics_api.build_fetch_params()
         assert (
-            url
-            == "http://localhost:4287/groups/test_project/processes/test-process-id/disks/test-disk/measurements"
+            url == "http://localhost:4287/groups/test_project/processes/test-process-id/disks/test-disk/measurements"
         )
         assert params["params"]["start"] == "2023-07-26T00:00:00.000Z"
         assert params["params"]["end"] == "2023-07-26T01:00:00.000Z"
@@ -365,7 +361,7 @@ def test_disk_metrics_api(
             result, state = disk_metrics_api.check_move_fetch_window(
                 {"params": {"end": "2023-07-26T01:00:00.000Z"}}
             )
-            assert result == True
+            assert result is True
             assert state == {"last_time_epoch": 1500000}
 
     sample_data = {
@@ -449,8 +445,7 @@ def test_database_metrics_api(
         db_metrics_api.get_window = Mock(return_value=(1000000, 2000000))
         url, params = db_metrics_api.build_fetch_params()
         assert (
-            url
-            == "http://localhost:8247/groups/test_project/processes/test-process-id/databases/test-database/measurements"
+            url == "http://localhost:8247/groups/test_project/processes/test-process-id/databases/test-database/measurements"
         )
         assert params["params"]["start"] == "2023-07-26T00:00:00.000Z"
         assert params["params"]["end"] == "2023-07-26T01:00:00.000Z"
@@ -474,7 +469,7 @@ def test_database_metrics_api(
             result, state = db_metrics_api.check_move_fetch_window(
                 {"params": {"end": "2023-07-26T01:00:00.000Z"}}
             )
-            assert result == True
+            assert result is True
             assert state == {"last_time_epoch": 1500000}
 
     sample_data = {
@@ -571,7 +566,7 @@ def test_project_events_api(
             result, state = project_events_api.check_move_fetch_window(
                 {"params": {"maxDate": "2023-07-26T01:00:00.000Z"}}
             )
-            assert result == True
+            assert result is True
             assert state == {"last_time_epoch": 1500000, "page_num": 0}
 
     sample_data = {
@@ -681,7 +676,7 @@ def test_process_metrics_api_load(
                 "name": "metric1",
                 "units": "MB",
                 "dataPoints": [
-                    {"timestamp": f"2023-07-26T{i//60:02d}:{i%60:02d}:00Z", "value": i}
+                    {"timestamp": f"2023-07-26T{i // 60:02d}:{i % 60:02d}:00Z", "value": i}
                     for i in range(num_records)
                 ],
             }
@@ -751,7 +746,7 @@ def test_disk_metrics_api_load(
                 "name": "disk_metric1",
                 "units": "GB",
                 "dataPoints": [
-                    {"timestamp": f"2023-07-26T{i//60:02d}:{i%60:02d}:00Z", "value": i}
+                    {"timestamp": f"2023-07-26T{i // 60:02d}:{i % 60:02d}:00Z", "value": i}
                     for i in range(num_records)
                 ],
             }
