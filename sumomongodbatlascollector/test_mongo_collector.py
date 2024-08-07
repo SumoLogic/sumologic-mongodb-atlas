@@ -2,10 +2,10 @@ import pytest
 import yaml
 import tempfile
 import os
-from unittest.mock import patch, MagicMock, call, PropertyMock
+from unittest.mock import patch, MagicMock, call
 from main import MongoDBAtlasCollector
 from sumoappclient.sumoclient.base import BaseCollector
-from sumoappclient.provider.factory import ProviderFactory
+# from sumoappclient.provider.factory import ProviderFactory
 from requests.auth import HTTPDigestAuth
 
 
@@ -68,7 +68,9 @@ def mongodb_atlas_collector(mock_config, mock_provider, temp_config_dir):
         return_value=mock_provider,
     ), patch("os.path.dirname", return_value=temp_config_dir), patch.object(
         BaseCollector, "__init__", mock_base_init
-    ), patch.object(MongoDBAtlasCollector, "__init__", return_value=None):
+    ), patch.object(
+        MongoDBAtlasCollector, "__init__", return_value=None
+    ):
         collector = MongoDBAtlasCollector()
         BaseCollector.__init__(
             collector, temp_config_dir
@@ -96,12 +98,10 @@ def test_mongodb_atlas_collector_init(
     assert mongodb_atlas_collector.api_config == mock_config["MongoDBAtlas"]
     assert isinstance(mongodb_atlas_collector.digestauth, HTTPDigestAuth)
     assert (
-        mongodb_atlas_collector.digestauth.username
-        == mock_config["MongoDBAtlas"]["PUBLIC_API_KEY"]
+        mongodb_atlas_collector.digestauth.username == mock_config["MongoDBAtlas"]["PUBLIC_API_KEY"]
     )
     assert (
-        mongodb_atlas_collector.digestauth.password
-        == mock_config["MongoDBAtlas"]["PRIVATE_API_KEY"]
+        mongodb_atlas_collector.digestauth.password == mock_config["MongoDBAtlas"]["PRIVATE_API_KEY"]
     )
     assert hasattr(mongodb_atlas_collector, "mongosess")
 

@@ -2,7 +2,7 @@ name: "Run Static tests"
 on: [workflow_dispatch, pull_request]
 
 jobs:
-  run-test:
+  lint-test:
     name: "Run Security & Linting Tests"
     runs-on: "ubuntu-latest"
 
@@ -19,22 +19,22 @@ jobs:
 
       - name: Run Security Tests
         run: |
-          bandit -r sumomongodbatlascollector/ --skip B108,B113,B314,B405,B404,B501,B506,B602,B604,B605,B607,B608
+          bandit -c .bandit -r sumomongodbatlascollector/ -f custom
 
       - name: Run Linting Tests
         run: |
           flake8 --max-line-length=120 --ignore=E231,E225,F541,E501,E402,F841,W605,E731,E722,C901,F821  sumomongodbatlascollector/
 
-      - name: Static Type Checks
-        continue-on-error: true
-        run: |
-          cd sumomongodbatlascollector/
-          mypy --install-types ./main.py
-          mypy ./main.py --disable-error-code=import-untyped
-          mypy --install-types ./api.py
-          mypy ./api.py --disable-error-code=import-untyped
+      # - name: Static Type Checks
+      #   continue-on-error: true
+      #   run: |
+      #     cd sumomongodbatlascollector/
+      #     mypy --install-types ./main.py
+      #     mypy ./main.py --disable-error-code=import-untyped
+      #     mypy --install-types ./api.py
+      #     mypy ./api.py --disable-error-code=import-untyped
 
-  build-test:
+  run-test:
     name: "Run Build and Install Tests"
     runs-on: "ubuntu-latest"
 
@@ -49,14 +49,14 @@ jobs:
       - name: Install build dependencies
         run: |
           python -m pip install -U pip wheel setuptools
-      - name: "Build"
+      - name: "Install Requirements"
         run: |
-          python main.py sdist bdist_wheel
+          pip install -r requirements.txt
 
-      - name: "Install"
+      - name: "Install Pytest"
         run: |
-          pip install dist/sumologic_appdevutils*.whl
+          pip install pytest
 
-      - name: "Test CLITool version command"
+      - name: "Run Pytest"
         run: |
-          sumoappsuite version
+          pytest -vvv sumomongodbatlascollector/test_mongo_collector.py

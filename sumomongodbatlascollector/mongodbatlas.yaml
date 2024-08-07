@@ -81,6 +81,7 @@ Collection:
  DB_DIR: ~/sumo
  MIN_REQUEST_WINDOW_LENGTH: 60 # IN SECONDS
  MAX_REQUEST_WINDOW_LENGTH: 900 # IN SECONDS
+ ACTIVATE_TIME_AND_MEMORY_TRACKING: True # Boolean
 
 DeployMetaData:
  PACKAGENAME: "sumologic-mongodb-atlas"

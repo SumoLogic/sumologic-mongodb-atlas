@@ -3,12 +3,12 @@
 import gzip
 import json
 import os
-import psutil
-import tracemalloc
+# import psutil
+# import tracemalloc
 from io import BytesIO
 import time
 from requests.auth import HTTPDigestAuth
-import dateutil
+# import dateutil
 from sumoappclient.sumoclient.base import BaseAPI
 from sumoappclient.sumoclient.factory import OutputHandlerFactory
 from sumoappclient.common.utils import (
@@ -18,16 +18,13 @@ from sumoappclient.common.utils import (
     convert_date_to_epoch,
 )
 from sumoappclient.sumoclient.httputils import ClientMixin
-from time_and_memory_tracker import track_time_and_memory, TimeAndMemoryTracker
+# from time_and_memory_tracker import track_time_and_memory, TimeAndMemoryTracker
 
 
 class MongoDBAPI(BaseAPI):
     MOVING_WINDOW_DELTA = 0.001
     isoformat = "%Y-%m-%dT%H:%M:%S.%fZ"
     date_format = "%Y-%m-%dT%H:%M:%SZ"
-    activate_time_and_memory_tracker = self.collection_config.get(
-        "ACTIVATE_TIME_AND_MEMORY_TRACKER", False
-    ) or os.environ.get("ACTIVATE_TIME_AND_MEMORY_TRACKER", False)
 
     def __init__(self, kvstore, config):
         super(MongoDBAPI, self).__init__(kvstore, config)
@@ -42,21 +39,18 @@ class MongoDBAPI(BaseAPI):
             username=self.api_config["PUBLIC_API_KEY"],
             password=self.api_config["PRIVATE_API_KEY"],
         )
+        activate_time_and_memory_tracker = self.collection_config.get(
+            "ACTIVATE_TIME_AND_MEMORY_TRACKER", False
+        ) or os.environ.get("ACTIVATE_TIME_AND_MEMORY_TRACKER", False)
 
     def get_window(self, last_time_epoch):
         start_time_epoch = last_time_epoch + self.MOVING_WINDOW_DELTA
-        end_time_epoch = (
-            get_current_timestamp()
-            - self.collection_config["END_TIME_EPOCH_OFFSET_SECONDS"]
-        )
+        end_time_epoch = (get_current_timestamp() - self.collection_config["END_TIME_EPOCH_OFFSET_SECONDS"])
 
         while not (end_time_epoch - start_time_epoch > self.MIN_REQUEST_WINDOW_LENGTH):
             # initially last_time_epoch is same as current_time_stamp so endtime becomes lesser than starttime
             time.sleep(self.MIN_REQUEST_WINDOW_LENGTH)
-            end_time_epoch = (
-                get_current_timestamp()
-                - self.collection_config["END_TIME_EPOCH_OFFSET_SECONDS"]
-            )
+            end_time_epoch = (get_current_timestamp() - self.collection_config["END_TIME_EPOCH_OFFSET_SECONDS"])
 
         if (end_time_epoch - start_time_epoch) > self.MAX_REQUEST_WINDOW_LENGTH:
             end_time_epoch = start_time_epoch + self.MAX_REQUEST_WINDOW_LENGTH
@@ -246,12 +240,7 @@ class PaginatedFetchMixin(MongoDBAPI):
                     self.log.error(
                         f"""Failed to fetch LogType: {log_type} Page: {kwargs['params']['pageNum']} Reason: {data} starttime: {kwargs['params']['minDate']} endtime: {kwargs['params']['maxDate']}"""
                     )
-                next_request = (
-                    fetch_success
-                    and send_success
-                    and has_next_page
-                    and self.is_time_remaining()
-                )
+                next_request = (fetch_success and send_success and has_next_page and self.is_time_remaining())
         finally:
             sess.close()
             self.log.info(
@@ -986,12 +975,7 @@ class AlertsAPI(MongoDBAPI):
                     self.log.error(
                         f"""Unable to fetch Project: {self.api_config['PROJECT_ID']} Alerts Page: {kwargs['params']['pageNum']} Reason: {data} """
                     )
-                next_request = (
-                    fetch_success
-                    and send_success
-                    and has_next_page
-                    and self.is_time_remaining()
-                )
+                next_request = (fetch_success and send_success and has_next_page and self.is_time_remaining())
         finally:
             sess.close()
             self.log.info(

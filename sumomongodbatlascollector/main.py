@@ -7,7 +7,7 @@ import os
 from concurrent import futures
 from random import shuffle
 from requests.auth import HTTPDigestAuth
-from time_and_memory_tracker import track_time_and_memory, TimeAndMemoryTracker
+# from time_and_memory_tracker import track_time_and_memory, TimeAndMemoryTracker
 
 from sumoappclient.sumoclient.base import BaseCollector
 from sumoappclient.sumoclient.httputils import ClientMixin
