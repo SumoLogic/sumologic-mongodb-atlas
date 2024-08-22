@@ -148,7 +148,7 @@ class PaginatedFetchMixin(MongoDBAPI):
             start_message = tracker.start("ClientMixin.get_new_session")
             sess = ClientMixin.get_new_session()
             end_message = tracker.end("ClientMixin.get_new_session")
-            self.log.info(f'''Fetching LogType: {log_type} kwargs: {kwargs} url: {url} end_message: {end_message} ''')  
+            self.log.info(f'''Fetching LogType: {log_type} kwargs: {kwargs} url: {url} end_message: {end_message} ''')
             try:
                 while next_request:
                     send_success = has_next_page = False
