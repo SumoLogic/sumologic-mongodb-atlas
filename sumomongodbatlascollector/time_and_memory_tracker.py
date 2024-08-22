@@ -60,5 +60,5 @@ class TimeAndMemoryTracker:
         return (
             f"{entry['operation_name']} completed in {execution_time:.2f} seconds, "
             f"used {memory_used / 1024 / 1024:.2f} MB, "
-            f"end time: {exit_time:.2f}, final memory: {exit_memory / 1024 / 1024:.2f} MB"
+            f"start time: {entry['start_time']:.2f}, end time: {exit_time:.2f}, final memory: {exit_memory / 1024 / 1024:.2f} MB"
         )

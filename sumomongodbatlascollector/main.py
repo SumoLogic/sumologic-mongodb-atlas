@@ -1,13 +1,11 @@
 # -*- coding: future_fstrings -*-
 
-import time
-import tracemalloc
 import traceback
 import os
 from concurrent import futures
 from random import shuffle
 from requests.auth import HTTPDigestAuth
-# from time_and_memory_tracker import track_time_and_memory, TimeAndMemoryTracker
+from time_and_memory_tracker import TimeAndMemoryTracker
 
 from sumoappclient.sumoclient.base import BaseCollector
 from sumoappclient.sumoclient.httputils import ClientMixin
@@ -240,10 +238,6 @@ class MongoDBAtlasCollector(BaseCollector):
         process_ids, hostnames = self._get_process_names()
         cluster_mapping = self.kvstore.get("cluster_mapping", {}).get("values", {})
 
-        start_time = time.time()
-        self.log.debug(
-            f"API level logging started at {start_time}, memory usage: {tracemalloc.get_traced_memory()[0]} bytes"
-        )
         if "LOG_TYPES" in self.api_config:
             if "DATABASE" in self.api_config["LOG_TYPES"]:
                 filenames.extend(dblog_files)
@@ -314,46 +308,40 @@ class MongoDBAtlasCollector(BaseCollector):
         if self.is_running():
             try:
                 self.log.info("Starting MongoDB Atlas Forwarder...")
-                task_params = self.build_task_params()
-                shuffle(task_params)
-                all_futures = {}
-                self.log.debug(
-                    "spawning %d workers" % self.config["Collection"]["NUM_WORKERS"]
-                )
-                with futures.ThreadPoolExecutor(
-                    max_workers=self.config["Collection"]["NUM_WORKERS"]
-                ) as executor:
-                    results = {
-                        executor.submit(self.execute_api_with_logging, apiobj): apiobj
-                        for apiobj in task_params
-                    }
-                    all_futures.update(results)
-                for future in futures.as_completed(all_futures):
-                    param = all_futures[future]
-                    api_type = str(param)
-                    try:
-                        future.result()
-                        obj = self.kvstore.get(api_type)
-                    except Exception as exc:
-                        self.log.error(
-                            f"API Type: {api_type} thread generated an exception: {exc}",
-                            exc_info=True,
-                        )
-                    else:
-                        self.log.info(f"API Type: {api_type} thread completed {obj}")
+                with TimeAndMemoryTracker(activate=True) as tracker:
+                    start_message = tracker.start("self.build_task_params")
+                    task_params = self.build_task_params()
+                    end_message = tracker.end("self.build_task_params")
+                    self.log.info(f'''Building Task Params end_message: {end_message}''')
+                    shuffle(task_params)
+                    all_futures = {}
+                    self.log.debug("spawning %d workers" % self.config["Collection"]["NUM_WORKERS"])
+                    with futures.ThreadPoolExecutor(
+                        max_workers=self.config["Collection"]["NUM_WORKERS"]
+                    ) as executor:
+                        results = {executor.submit(apiobj.fetch): apiobj for apiobj in task_params}
+                        all_futures.update(results)
+                    for future in futures.as_completed(all_futures):
+                        param = all_futures[future]
+                        api_type = str(param)
+                        try:
+                            future.result()
+                            obj = self.kvstore.get(api_type)
+                        except Exception as exc:
+                            self.log.error(f"API Type: {api_type} thread generated an exception: {exc}", exc_info=True,)
+                        else:
+                            self.log.info(f"API Type: {api_type} thread completed {obj}")
             finally:
                 self.stop_running()
                 self.mongosess.close()
         else:
             if not self.is_process_running(["sumomongodbatlascollector"]):
-                self.kvstore.release_lock_on_expired_key(
-                    self.SINGLE_PROCESS_LOCK_KEY, expiry_min=10
-                )
+                self.kvstore.release_lock_on_expired_key(self.SINGLE_PROCESS_LOCK_KEY, expiry_min=10)
 
-    def execute_api_with_logging(self, apiobj):
-        api_type = str(apiobj.__class__.__name__)
-        result = apiobj.fetch()
-        return result
+    # def execute_api_with_logging(self, apiobj):
+    #     api_type = str(apiobj.__class__.__name__)
+    #     result = apiobj.fetch()
+    #     return result
 
     def test(self):
         if self.is_running():

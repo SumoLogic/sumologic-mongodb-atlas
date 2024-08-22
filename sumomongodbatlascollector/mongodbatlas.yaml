@@ -4,8 +4,8 @@ MongoDBAtlas:
  PAGINATION_LIMIT: 500
  ORGANIZATION_ID: null
  PROJECT_ID: null
- PRIVATE_API_KEY: null
  PUBLIC_API_KEY: null
+ PRIVATE_API_KEY: null
  LOG_TYPES:
   - DATABASE
   - AUDIT
@@ -81,7 +81,8 @@ Collection:
  DB_DIR: ~/sumo
  MIN_REQUEST_WINDOW_LENGTH: 60 # IN SECONDS
  MAX_REQUEST_WINDOW_LENGTH: 900 # IN SECONDS
- ACTIVATE_TIME_AND_MEMORY_TRACKING: True # Boolean
+ ACTIVATE_TIME_AND_MEMORY_TRACKING: False
+ # Clusters: ["cluster1-shard-00-00.abc123.mongodb.net"]
 
 DeployMetaData:
  PACKAGENAME: "sumologic-mongodb-atlas"

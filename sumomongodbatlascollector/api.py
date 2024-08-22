@@ -18,7 +18,7 @@ from sumoappclient.common.utils import (
     convert_date_to_epoch,
 )
 from sumoappclient.sumoclient.httputils import ClientMixin
-# from time_and_memory_tracker import track_time_and_memory, TimeAndMemoryTracker
+from time_and_memory_tracker import TimeAndMemoryTracker
 
 
 class MongoDBAPI(BaseAPI):
@@ -69,95 +69,137 @@ class MongoDBAPI(BaseAPI):
 class FetchMixin(MongoDBAPI):
     def fetch(self):
         log_type = self.get_key()
-        output_handler = OutputHandlerFactory.get_handler(
-            self.collection_config["OUTPUT_HANDLER"],
-            path=self.pathname,
-            config=self.config,
-        )
-
-        url, kwargs = self.build_fetch_params()
-        state = None
-        payload = []
-        try:
-            fetch_success, content = ClientMixin.make_request(
-                url,
-                method="get",
-                logger=self.log,
-                TIMEOUT=self.collection_config["TIMEOUT"],
-                MAX_RETRY=self.collection_config["MAX_RETRY"],
-                BACKOFF_FACTOR=self.collection_config["BACKOFF_FACTOR"],
-                **kwargs,
-            )
-            if fetch_success and len(content) > 0:
-                payload, state = self.transform_data(content)
-                # Todo Make this atomic if after sending -> Ctrl - C happens then it fails to save state
-                params = self.build_send_params()
-                send_success = output_handler.send(payload, **params)
-                if send_success:
-                    self.save_state(**state)
-                    self.log.info(
-                        f"""Successfully sent LogType: {self.get_key()} Data: {len(content)}"""
-                    )
-                else:
-                    self.log.error(f"""Failed to send LogType: {self.get_key()}""")
-            elif fetch_success and len(content) == 0:
-                self.log.info(
-                    f"""No results window LogType: {log_type} kwargs: {kwargs} status: {fetch_success} url: {url}"""
-                )
-                is_move_fetch_window, new_state = self.check_move_fetch_window(kwargs)
-                if is_move_fetch_window:
-                    self.save_state(**new_state)
-                    self.log.debug(f"""Moving fetched window newstate: {new_state}""")
-            else:
-                self.log.error(
-                    f"""Error LogType: {log_type} status: {fetch_success} reason: {content} kwargs: {kwargs} url: {url}"""
-                )
-        finally:
-            output_handler.close()
-            self.log.info(
-                f"""Completed LogType: {log_type} curstate: {state} datasent: {len(payload)}"""
+        with TimeAndMemoryTracker(activate=True) as tracker:
+            start_message = tracker.start("OutputHandlerFactory.get_handler")
+            self.log.info(start_message)
+            output_handler = OutputHandlerFactory.get_handler(
+                self.collection_config["OUTPUT_HANDLER"],
+                path=self.pathname,
+                config=self.config,
             )
 
-
-class PaginatedFetchMixin(MongoDBAPI):
-    def fetch(self):
-        current_state = self.get_state()
-        output_handler = OutputHandlerFactory.get_handler(self.collection_config["OUTPUT_HANDLER"], path=self.pathname, config=self.config)
-        url, kwargs = self.build_fetch_params()
-        log_type = self.get_key()
-        next_request = True
-        count = 0
-        sess = ClientMixin.get_new_session()
-        try:
-            while next_request:
-                send_success = has_next_page = False
-                status, data = ClientMixin.make_request(
+            end_message = tracker.end("OutputHandlerFactory.get_handler")
+            self.log.info(end_message)
+            start_message = tracker.start("self.build_fetch_params")
+            url, kwargs = self.build_fetch_params()
+            end_message = tracker.end("self.build_fetch_params")
+            self.log.info(f'''Fetching LogType: {log_type} kwargs: {kwargs} url: {url} end_message: {end_message}''')
+            state = None
+            payload = []
+            try:
+                start_message = tracker.start("ClientMixin.make_request")
+                fetch_success, content = ClientMixin.make_request(
                     url,
                     method="get",
-                    session=sess,
                     logger=self.log,
                     TIMEOUT=self.collection_config["TIMEOUT"],
                     MAX_RETRY=self.collection_config["MAX_RETRY"],
                     BACKOFF_FACTOR=self.collection_config["BACKOFF_FACTOR"],
                     **kwargs,
                 )
-                fetch_success = status and "results" in data
-                if fetch_success:
-                    has_next_page = len(data["results"]) > 0
-                    if has_next_page:
-                        payload, updated_state = self.transform_data(data)
-                        params = self.build_send_params()
-                        send_success = output_handler.send(payload, **params)
-                        if send_success:
-                            count += 1
-                            self.log.debug(
-                                f"""Successfully sent LogType: {log_type} Page: {kwargs['params']['pageNum']}  Datalen: {len(payload)} starttime: {kwargs['params']['minDate']} endtime: {kwargs['params']['maxDate']}"""
-                            )
-                            kwargs["params"]["pageNum"] += 1
-                            # save and update last_time_epoch required for next invocation
-                            current_state.update(updated_state)
-                            # time not available save current state new page num else continue
-                            if not self.is_time_remaining():
+                self.log.info(f'''Fetching LogType: {log_type} kwargs: {kwargs} url: {url} end_message: {start_message}''')
+                end_message = tracker.end("ClientMixin.make_request")
+                self.log.info(end_message)
+                if fetch_success and len(content) > 0:
+                    payload, state = self.transform_data(content)
+                    # Todo Make this atomic if after sending -> Ctrl - C happens then it fails to save state
+                    params = self.build_send_params()
+                    start_message = tracker.start("OutputHandler.send")
+                    self.log.info(f'''Sending LogType: {self.get_key()} Data: {len(content)} url: {url} start_message: {start_message}''')
+                    send_success = output_handler.send(payload, **params)
+                    end_message = tracker.end("OutputHandler.send")
+                    self.log.info(f'''Sending LogType: {self.get_key()} Data: {len(content)} kwargs: {kwargs} url: {url} end_message: {end_message}''')
+                    if send_success:
+                        self.save_state(**state)
+                        self.log.info(f"""Successfully sent LogType: {self.get_key()} Data: {len(content)}""")
+                    else:
+                        self.log.error(f"""Failed to send LogType: {self.get_key()}""")
+                elif fetch_success and len(content) == 0:
+                    self.log.info(
+                        f"""No results window LogType: {log_type} kwargs: {kwargs} status: {fetch_success} url: {url}"""
+                    )
+                    is_move_fetch_window, new_state = self.check_move_fetch_window(kwargs)
+                    if is_move_fetch_window:
+                        self.save_state(**new_state)
+                        self.log.debug(f"""Moving fetched window newstate: {new_state}""")
+                else:
+                    self.log.error(
+                        f"""Error LogType: {log_type} status: {fetch_success} reason: {content} kwargs: {kwargs} url: {url}"""
+                    )
+            finally:
+                output_handler.close()
+                self.log.info(
+                    f"""Completed LogType: {log_type} curstate: {state} datasent: {len(payload)}"""
+                )
+
+
+class PaginatedFetchMixin(MongoDBAPI):
+    def fetch(self):
+        current_state = self.get_state()
+        with TimeAndMemoryTracker(activate=True) as tracker:
+            output_handler = OutputHandlerFactory.get_handler(self.collection_config["OUTPUT_HANDLER"], path=self.pathname, config=self.config)
+            start_message = tracker.start("self.build_fetch_params")
+            url, kwargs = self.build_fetch_params()
+            end_message = tracker.end("self.build_fetch_params")
+            log_type = self.get_key()
+            self.log.info(f'''Fetching LogType: {log_type} kwargs: {kwargs} url: {url} end_message: {end_message} ''')
+            next_request = True
+            count = 0
+            start_message = tracker.start("ClientMixin.get_new_session")
+            sess = ClientMixin.get_new_session()
+            end_message = tracker.end("ClientMixin.get_new_session")
+            self.log.info(f'''Fetching LogType: {log_type} kwargs: {kwargs} url: {url} end_message: {end_message} ''')  
+            try:
+                while next_request:
+                    send_success = has_next_page = False
+                    status, data = ClientMixin.make_request(
+                        url,
+                        method="get",
+                        session=sess,
+                        logger=self.log,
+                        TIMEOUT=self.collection_config["TIMEOUT"],
+                        MAX_RETRY=self.collection_config["MAX_RETRY"],
+                        BACKOFF_FACTOR=self.collection_config["BACKOFF_FACTOR"],
+                        **kwargs,
+                    )
+                    fetch_success = status and "results" in data
+                    if fetch_success:
+                        has_next_page = len(data["results"]) > 0
+                        if has_next_page:
+                            payload, updated_state = self.transform_data(data)
+                            params = self.build_send_params()
+                            start_message = tracker.start("OutputHandler.send")
+                            send_success = output_handler.send(payload, **params)
+                            end_message = tracker.end("OutputHandler.send")
+                            if send_success:
+                                count += 1
+                                self.log.debug(
+                                    f"""Successfully sent LogType: {log_type} Page: {kwargs['params']['pageNum']}  Datalen: {len(payload)} starttime: {kwargs['params']['minDate']} endtime: {kwargs['params']['maxDate']} end_message: {end_message}"""
+                                )
+                                kwargs["params"]["pageNum"] += 1
+                                # save and update last_time_epoch required for next invocation
+                                current_state.update(updated_state)
+                                # time not available save current state new page num else continue
+                                if not self.is_time_remaining():
+                                    self.save_state(
+                                        {
+                                            "start_time_epoch": convert_utc_date_to_epoch(
+                                                kwargs["params"]["minDate"]
+                                            ),
+                                            "end_time_epoch": convert_utc_date_to_epoch(
+                                                kwargs["params"]["maxDate"]
+                                            ),
+                                            "page_num": kwargs["params"]["pageNum"],
+                                            "last_time_epoch": current_state[
+                                                "last_time_epoch"
+                                            ],
+                                        }
+                                    )
+                            else:
+                                # show err unable to send save current state
+                                self.log.error(
+                                    f"""Failed to send LogType: {log_type} Page: {kwargs['params']['pageNum']} starttime: {kwargs['params']['minDate']} endtime: {kwargs['params']['maxDate']}"""
+                                )
                                 self.save_state(
                                     {
                                         "start_time_epoch": convert_utc_date_to_epoch(
@@ -167,85 +209,66 @@ class PaginatedFetchMixin(MongoDBAPI):
                                             kwargs["params"]["maxDate"]
                                         ),
                                         "page_num": kwargs["params"]["pageNum"],
-                                        "last_time_epoch": current_state[
-                                            "last_time_epoch"
-                                        ],
+                                        "last_time_epoch": current_state["last_time_epoch"],
                                     }
                                 )
                         else:
-                            # show err unable to send save current state
-                            self.log.error(
-                                f"""Failed to send LogType: {log_type} Page: {kwargs['params']['pageNum']} starttime: {kwargs['params']['minDate']} endtime: {kwargs['params']['maxDate']}"""
-                            )
-                            self.save_state(
-                                {
-                                    "start_time_epoch": convert_utc_date_to_epoch(
-                                        kwargs["params"]["minDate"]
-                                    ),
-                                    "end_time_epoch": convert_utc_date_to_epoch(
-                                        kwargs["params"]["maxDate"]
-                                    ),
-                                    "page_num": kwargs["params"]["pageNum"],
-                                    "last_time_epoch": current_state["last_time_epoch"],
-                                }
-                            )
-                    else:
-                        # here fetch success is true and assuming pageNum starts from 1
-                        # page_num has finished increase window calc last_time_epoch
-                        if kwargs["params"]["pageNum"] > 1:
-                            self.log.debug(
-                                f"""Moving starttime window LogType: {log_type} Page: {kwargs['params']['pageNum']} starttime: {kwargs['params']['minDate']} endtime: {kwargs['params']['maxDate']} to last_time_epoch": {convert_epoch_to_utc_date(current_state['last_time_epoch'], date_format=self.isoformat)}"""
-                            )
-                            self.save_state(
-                                {
-                                    "page_num": 0,
-                                    "last_time_epoch": current_state["last_time_epoch"],
-                                }
-                            )
-                        else:
-                            # genuine no result window no change
-                            self.log.info(
-                                f"""No results window LogType: {log_type} Page: {kwargs['params']['pageNum']} starttime: {kwargs['params']['minDate']} endtime: {kwargs['params']['maxDate']} status: {fetch_success}"""
-                            )
-                            is_move_fetch_window, updated_state = (
-                                self.check_move_fetch_window(kwargs)
-                            )
-                            if is_move_fetch_window:
-                                current_state.update(updated_state)
+                            # here fetch success is true and assuming pageNum starts from 1
+                            # page_num has finished increase window calc last_time_epoch
+                            if kwargs["params"]["pageNum"] > 1:
                                 self.log.debug(
                                     f"""Moving starttime window LogType: {log_type} Page: {kwargs['params']['pageNum']} starttime: {kwargs['params']['minDate']} endtime: {kwargs['params']['maxDate']} to last_time_epoch": {convert_epoch_to_utc_date(current_state['last_time_epoch'], date_format=self.isoformat)}"""
                                 )
                                 self.save_state(
                                     {
                                         "page_num": 0,
-                                        "last_time_epoch": current_state[
-                                            "last_time_epoch"
-                                        ],
+                                        "last_time_epoch": current_state["last_time_epoch"],
                                     }
                                 )
+                            else:
+                                # genuine no result window no change
+                                self.log.info(
+                                    f"""No results window LogType: {log_type} Page: {kwargs['params']['pageNum']} starttime: {kwargs['params']['minDate']} endtime: {kwargs['params']['maxDate']} status: {fetch_success}"""
+                                )
+                                is_move_fetch_window, updated_state = (
+                                    self.check_move_fetch_window(kwargs)
+                                )
+                                if is_move_fetch_window:
+                                    current_state.update(updated_state)
+                                    self.log.debug(
+                                        f"""Moving starttime window LogType: {log_type} Page: {kwargs['params']['pageNum']} starttime: {kwargs['params']['minDate']} endtime: {kwargs['params']['maxDate']} to last_time_epoch": {convert_epoch_to_utc_date(current_state['last_time_epoch'], date_format=self.isoformat)}"""
+                                    )
+                                    self.save_state(
+                                        {
+                                            "page_num": 0,
+                                            "last_time_epoch": current_state[
+                                                "last_time_epoch"
+                                            ],
+                                        }
+                                    )
 
-                else:
-                    self.save_state(
-                        {
-                            "start_time_epoch": convert_utc_date_to_epoch(
-                                kwargs["params"]["minDate"]
-                            ),
-                            "end_time_epoch": convert_utc_date_to_epoch(
-                                kwargs["params"]["maxDate"]
-                            ),
-                            "page_num": kwargs["params"]["pageNum"],
-                            "last_time_epoch": current_state["last_time_epoch"],
-                        }
-                    )
-                    self.log.error(
-                        f"""Failed to fetch LogType: {log_type} Page: {kwargs['params']['pageNum']} Reason: {data} starttime: {kwargs['params']['minDate']} endtime: {kwargs['params']['maxDate']}"""
-                    )
-                next_request = (fetch_success and send_success and has_next_page and self.is_time_remaining())
-        finally:
-            sess.close()
-            self.log.info(
-                f"""Completed LogType: {log_type} Count: {count} Page: {kwargs['params']['pageNum']} starttime: {kwargs['params']['minDate']} endtime: {kwargs['params']['maxDate']}"""
-            )
+                    else:
+                        self.save_state(
+                            {
+                                "start_time_epoch": convert_utc_date_to_epoch(
+                                    kwargs["params"]["minDate"]
+                                ),
+                                "end_time_epoch": convert_utc_date_to_epoch(
+                                    kwargs["params"]["maxDate"]
+                                ),
+                                "page_num": kwargs["params"]["pageNum"],
+                                "last_time_epoch": current_state["last_time_epoch"],
+                            }
+                        )
+                        self.log.error(
+                            f"""Failed to fetch LogType: {log_type} Page: {kwargs['params']['pageNum']} Reason: {data} starttime: {kwargs['params']['minDate']} endtime: {kwargs['params']['maxDate']}"""
+                        )
+                    next_request = (fetch_success and send_success and has_next_page and self.is_time_remaining())
+            finally:
+                sess.close()
+                self.log.info(
+                    f"""Completed LogType: {log_type} Count: {count} Page: {kwargs['params']['pageNum']} starttime: {kwargs['params']['minDate']} endtime: {kwargs['params']['maxDate']}"""
+                )
 
 
 class LogAPI(FetchMixin):
