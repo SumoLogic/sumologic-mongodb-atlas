@@ -28,6 +28,9 @@ Outputs:
       Fn::GetAtt:
       - MongoDBAtlasFunction
       - Arn
+	MongoDBAtlasTable:
+			Description: MongoDBAtlasTable DynamoDB Table Name
+			Value: !Ref MongoDBAtlasTable
 Parameters:
   HttpLogsEndpoint:
     Type: String
@@ -68,9 +71,32 @@ Resources:
           Type: Schedule
       Handler: main.main
       MemorySize: 256
-      Policies:
-      - AmazonDynamoDBFullAccess
+			Policies:
+			- Version: "2012-10-17"
+				Statement:
+				- Effect: Allow
+					Action:
+					- dynamodb:PutItem
+          - dynamodb:UpdateItem
+          - dynamodb:GetItem
+          - dynamodb:Scan
+          - dynamodb:Query
+          Resource: !GetAtt MongoDBAtlasTableResource.Arn
       Runtime: python3.11
       Timeout: 900
     Type: AWS::Serverless::Function
+
+	MongoDBAtlasTableResource:
+		Type: AWS::DynamoDB::Table
+		Properties:
+			TableName: !Sub ${AWS::StackName}-mongodbatlastable
+			AttributeDefinitions:
+			- AttributeName: id
+				AttributeType: S
+			KeySchema:
+			- AttributeName: id
+				KeyType: HASH
+			ProvisionedThroughput:
+				ReadCapacityUnits: 5
+				WriteCapacityUnits: 5
 Transform: AWS::Serverless-2016-10-31

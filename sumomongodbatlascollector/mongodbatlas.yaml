@@ -4,8 +4,8 @@ MongoDBAtlas:
  PAGINATION_LIMIT: 500
  ORGANIZATION_ID: null
  PROJECT_ID: null
- PRIVATE_API_KEY: null
  PUBLIC_API_KEY: null
+ PRIVATE_API_KEY: null
  LOG_TYPES:
   - DATABASE
   - AUDIT
@@ -72,13 +72,17 @@ Collection:
  OUTPUT_HANDLER: HTTP
  MAX_RETRY: 5
  BACKOFF_FACTOR: 1
- TIMEOUT: 60
+ TIMEOUT: 90 # Increase to 2 minutes if the sumo server response time is slow
  COMPRESSED: true
- MAX_PAYLOAD_BYTESIZE: 500000
+ MAX_PAYLOAD_BYTESIZE: 4190208 #4MB
  END_TIME_EPOCH_OFFSET_SECONDS: 120
- BACKFILL_DAYS: 0
+ BACKFILL_DAYS: 0 # Determines the start_time of the collection
  DBNAME: "mongodbatlas"
  DB_DIR: ~/sumo
+ MIN_REQUEST_WINDOW_LENGTH: 60 # IN SECONDS
+ MAX_REQUEST_WINDOW_LENGTH: 900 # IN SECONDS
+ ACTIVATE_TIME_AND_MEMORY_TRACKING: False
+ # Clusters: ["cluster1-shard-00-00.abc123.mongodb.net"]
 
 DeployMetaData:
  PACKAGENAME: "sumologic-mongodb-atlas"
