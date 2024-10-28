@@ -21,7 +21,7 @@ CONSOLE_SCRIPTS = ["sumomongodbatlascollector=sumomongodbatlascollector.main:mai
 setup(
     name="sumologic-mongodb-atlas",
     version=__versionstr__,
-    packages=find_packages(),
+    packages=find_packages("sumomongodbatlascollector", exclude=["tests"]),
     install_requires=INSTALL_REQUIRES,
     extras_require={
         "aws": ["boto3>=1.34.149", "botocore>=1.34.149"],
