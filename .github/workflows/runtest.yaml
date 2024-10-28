@@ -35,7 +35,7 @@ jobs:
       #     mypy ./api.py --disable-error-code=import-untyped
 
   build-test:
-    name: "Run Build and Install Tests"
+    name: "Run Build Tests"
     runs-on: "ubuntu-latest"
 
     steps:
