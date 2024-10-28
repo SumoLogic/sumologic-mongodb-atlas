@@ -16,21 +16,23 @@ class TimeAndMemoryTracker:
             self.end()
 
     def start(self, operation_name: str) -> str:
-        if not self.activate:
-            return ""
+
         operation_name = operation_name.lower()
-        entry = {
-            "operation_name": operation_name,
-            "start_time": time.time(),
-            "start_memory": psutil.Process().memory_info().rss,
-        }
+        if self.activate:
+            entry = {
+                "operation_name": operation_name,
+                "start_time": time.time(),
+                "start_memory": psutil.Process().memory_info().rss,
+            }
+        else:
+            entry = {
+                "operation_name": operation_name
+            }
         self._stack.append(entry)
         return self._format_start_message(entry)
 
     def end(self, operation_name: str = None) -> str:
-        if not self.activate:
-            return ""
-        if self._stack:
+        if self.activate and self._stack:
             exit_time = time.time()
             exit_memory = psutil.Process().memory_info().rss
             entry = self._stack[-1]
@@ -44,21 +46,28 @@ class TimeAndMemoryTracker:
 
             self._stack.pop()
             return self._format_end_message(entry, exit_time, exit_memory)
-        return ""
+        else:
+            return f"{entry['operation_name']} completed "
 
     def _format_start_message(self, entry: Dict[str, Any]) -> str:
-        return (
-            f"Starting {entry['operation_name']} at {entry['start_time']:.2f}, "
-            f"initial memory: {entry['start_memory'] / 1024 / 1024:.2f} MB"
-        )
+        if self.activate:
+            return (
+                f"Starting {entry['operation_name']} start_time: {entry['start_time']:.2f} "
+                f"initial_memory_mb: {entry['start_memory'] / 1024 / 1024:.2f}"
+            )
+        else:
+            return f"Starting {entry['operation_name']} "
 
     def _format_end_message(
         self, entry: Dict[str, Any], exit_time: float, exit_memory: int
     ) -> str:
-        execution_time = exit_time - entry["start_time"]
-        memory_used = exit_memory - entry["start_memory"]
-        return (
-            f"{entry['operation_name']} completed in {execution_time:.2f} seconds, "
-            f"used {memory_used / 1024 / 1024:.2f} MB, "
-            f"start time: {entry['start_time']:.2f}, end time: {exit_time:.2f}, final memory: {exit_memory / 1024 / 1024:.2f} MB"
-        )
+        if self.activate:
+            execution_time = exit_time - entry["start_time"]
+            memory_used = exit_memory - entry["start_memory"]
+            return (
+                f"Completed {entry['operation_name']} execution_seconds: {execution_time:.2f}"
+                f"memory_used_mb: {memory_used / 1024 / 1024:.2f}"
+                f"start_time: {entry['start_time']:.2f}, end_time: {exit_time:.2f}, final_memory_mb: {exit_memory / 1024 / 1024:.2f}"
+            )
+        else:
+            return f"Completed {entry['operation_name']} "
