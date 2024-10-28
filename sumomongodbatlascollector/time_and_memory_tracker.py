@@ -18,36 +18,37 @@ class TimeAndMemoryTracker:
     def start(self, operation_name: str) -> str:
 
         operation_name = operation_name.lower()
+        entry = {
+            "operation_name": operation_name
+        }
         if self.activate:
-            entry = {
-                "operation_name": operation_name,
+            entry.update({
                 "start_time": time.time(),
-                "start_memory": psutil.Process().memory_info().rss,
-            }
-        else:
-            entry = {
-                "operation_name": operation_name
-            }
+                "start_memory": psutil.Process().memory_info().rss
+            })
+
         self._stack.append(entry)
         return self._format_start_message(entry)
 
     def end(self, operation_name: str = None) -> str:
-        if self.activate and self._stack:
-            exit_time = time.time()
-            exit_memory = psutil.Process().memory_info().rss
-            entry = self._stack[-1]
+        if self._stack:
 
+            entry = self._stack[-1]
             if operation_name:
                 operation_name = operation_name.lower()
                 if entry["operation_name"] != operation_name:
                     raise ValueError(
                         f"Attempting to end '{operation_name}' but the current operation is '{entry['operation_name']}'"
                     )
-
             self._stack.pop()
-            return self._format_end_message(entry, exit_time, exit_memory)
+            if self.activate:
+                entry.update({
+                    "exit_time": time.time(),
+                    "exit_memory": psutil.Process().memory_info().rss
+                })
+            return self._format_end_message(entry)
         else:
-            return f"{entry['operation_name']} completed "
+            return f"{operation_name.lower()} completed "
 
     def _format_start_message(self, entry: Dict[str, Any]) -> str:
         if self.activate:
@@ -58,9 +59,7 @@ class TimeAndMemoryTracker:
         else:
             return f"Starting {entry['operation_name']} "
 
-    def _format_end_message(
-        self, entry: Dict[str, Any], exit_time: float, exit_memory: int
-    ) -> str:
+    def _format_end_message(self, entry: Dict[str, Any]) -> str:
         if self.activate:
             execution_time = exit_time - entry["start_time"]
             memory_used = exit_memory - entry["start_memory"]
