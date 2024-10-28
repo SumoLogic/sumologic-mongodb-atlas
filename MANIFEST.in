@@ -3,4 +3,4 @@ include LICENSE
 include VERSION
 include README.md
 include sumomongodbatlascollector/mongodbatlas.yaml
-
+recursive-exclude tests *
