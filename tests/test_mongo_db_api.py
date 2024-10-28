@@ -6,7 +6,7 @@ from requests.auth import HTTPDigestAuth
 
 from sumoappclient.sumoclient.base import BaseAPI
 # from sumoappclient.common.utils import get_current_timestamp
-from api import MongoDBAPI
+from sumomongodbatlascollector.api import MongoDBAPI
 
 
 class ConcreteMongoDBAPI(MongoDBAPI):
@@ -62,7 +62,7 @@ def test_init(mongodb_api):
     assert isinstance(mongodb_api.digestauth, HTTPDigestAuth)
     assert mongodb_api.digestauth.username == "public_key"
     assert mongodb_api.digestauth.password == "private_key"
-    assert mongodb_api.MAX_REQUEST_WINDOW_LENGTH == 3600
+    assert mongodb_api.MAX_REQUEST_WINDOW_LENGTH == 900
     assert mongodb_api.MIN_REQUEST_WINDOW_LENGTH == 60
     assert isinstance(mongodb_api, MongoDBAPI)
     assert isinstance(mongodb_api, BaseAPI)

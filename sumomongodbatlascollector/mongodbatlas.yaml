@@ -81,7 +81,7 @@ Collection:
  DB_DIR: ~/sumo
  MIN_REQUEST_WINDOW_LENGTH: 60 # IN SECONDS
  MAX_REQUEST_WINDOW_LENGTH: 900 # IN SECONDS
- ACTIVATE_TIME_AND_MEMORY_TRACKING: False
+ ACTIVATE_TIME_AND_MEMORY_TRACKING: false
  # Clusters: ["cluster1-shard-00-00.abc123.mongodb.net"]
 
 DeployMetaData:

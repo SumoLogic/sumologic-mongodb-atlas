@@ -1,14 +1,9 @@
-# -*- coding: future_fstrings -*-
-
 import gzip
 import json
 import os
-# import psutil
-# import tracemalloc
 from io import BytesIO
 import time
 from requests.auth import HTTPDigestAuth
-# import dateutil
 from sumoappclient.sumoclient.base import BaseAPI
 from sumoappclient.sumoclient.factory import OutputHandlerFactory
 from sumoappclient.common.utils import (
@@ -69,7 +64,7 @@ class MongoDBAPI(BaseAPI):
 class FetchMixin(MongoDBAPI):
     def fetch(self):
         log_type = self.get_key()
-        with TimeAndMemoryTracker(activate=True) as tracker:
+        with TimeAndMemoryTracker(activate=self.collection_config.get("ACTIVATE_TIME_AND_MEMORY_TRACKING", False)) as tracker:
             start_message = tracker.start("OutputHandlerFactory.get_handler")
             self.log.info(start_message)
             output_handler = OutputHandlerFactory.get_handler(
@@ -136,7 +131,7 @@ class FetchMixin(MongoDBAPI):
 class PaginatedFetchMixin(MongoDBAPI):
     def fetch(self):
         current_state = self.get_state()
-        with TimeAndMemoryTracker(activate=True) as tracker:
+        with TimeAndMemoryTracker(activate=self.collection_config.get("ACTIVATE_TIME_AND_MEMORY_TRACKING", False)) as tracker:
             output_handler = OutputHandlerFactory.get_handler(self.collection_config["OUTPUT_HANDLER"], path=self.pathname, config=self.config)
             start_message = tracker.start("self.build_fetch_params")
             url, kwargs = self.build_fetch_params()

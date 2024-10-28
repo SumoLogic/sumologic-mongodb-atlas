@@ -1,5 +1,3 @@
-# -*- coding: future_fstrings -*-
-
 import traceback
 import os
 from concurrent import futures
@@ -34,6 +32,7 @@ class MongoDBAtlasCollector(BaseCollector):
         self.project_dir = self.get_current_dir()
         super(MongoDBAtlasCollector, self).__init__(self.project_dir)
         self.api_config = self.config["MongoDBAtlas"]
+
         self.digestauth = HTTPDigestAuth(
             username=self.api_config["PUBLIC_API_KEY"],
             password=self.api_config["PRIVATE_API_KEY"],
@@ -308,7 +307,7 @@ class MongoDBAtlasCollector(BaseCollector):
         if self.is_running():
             try:
                 self.log.info("Starting MongoDB Atlas Forwarder...")
-                with TimeAndMemoryTracker(activate=True) as tracker:
+                with TimeAndMemoryTracker(activate=self.collection_config.get("ACTIVATE_TIME_AND_MEMORY_TRACKING", False)) as tracker:
                     start_message = tracker.start("self.build_task_params")
                     task_params = self.build_task_params()
                     end_message = tracker.end("self.build_task_params")
