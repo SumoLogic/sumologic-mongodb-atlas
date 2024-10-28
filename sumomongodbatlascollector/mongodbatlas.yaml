@@ -1,7 +1,7 @@
 MongoDBAtlas:
  BASE_URL: "https://cloud.mongodb.com/api/atlas/v1.0"
  FETCH_METHOD: get
- PAGINATION_LIMIT: 500
+ PAGINATION_LIMIT: 500  # Number of events to fetch in a single API call.
  ORGANIZATION_ID: null
  PROJECT_ID: null
  PUBLIC_API_KEY: null
@@ -57,32 +57,32 @@ MongoDBAtlas:
     - DATABASE_AVERAGE_OBJECT_SIZE
 
 Logging:
- LOG_FORMAT: "%(levelname)s | %(asctime)s | %(threadName)s | %(name)s | %(message)s"
+ LOG_FORMAT: "%(levelname)s | %(asctime)s | %(threadName)s | %(name)s | %(message)s"  # Log format used by the python logging module to write logs in a file.
  ROTATION_TYPE: D
  ROTATION_INTERVAL: 1
  BACKUP_COUNT: 7
- ENABLE_CONSOLE_LOG: true
- ENABLE_LOGFILE: true
- LOG_FILEPATH: /tmp/mongodbatlascollector.log
+ ENABLE_CONSOLE_LOG: true  # Enables printing logs in a console.
+ ENABLE_LOGFILE: true  # Set to TRUE to write all logs and errors to a log file.
+ LOG_FILEPATH: /tmp/mongodbatlascollector.log  # Path of the log file used when ENABLE_LOGFILE is set to TRUE.
  LOG_LEVEL: "INFO"
 
 Collection:
  ENVIRONMENT: onprem
- NUM_WORKERS: 2
+ NUM_WORKERS: 2  # Number of threads to spawn for API calls.
  OUTPUT_HANDLER: HTTP
- MAX_RETRY: 5
- BACKOFF_FACTOR: 1
- TIMEOUT: 90 # Increase to 2 minutes if the sumo server response time is slow
+ MAX_RETRY: 5  # Number of retries to attempt in case of request failure.
+ BACKOFF_FACTOR: 1  # A backoff factor to apply between attempts after the second try. If the backoff_factor is 0.1, then sleep() will sleep for [0.0s, 0.2s, 0.4s, ...] between retries.
+ TIMEOUT: 90 # Increase to 2 minutes if the sumo server response time is slow. This time out used by the requests library.
  COMPRESSED: true
- MAX_PAYLOAD_BYTESIZE: 4190208 #4MB
- END_TIME_EPOCH_OFFSET_SECONDS: 120
- BACKFILL_DAYS: 0 # Determines the start_time of the collection
- DBNAME: "mongodbatlas"
- DB_DIR: ~/sumo
- MIN_REQUEST_WINDOW_LENGTH: 60 # IN SECONDS
- MAX_REQUEST_WINDOW_LENGTH: 900 # IN SECONDS
- ACTIVATE_TIME_AND_MEMORY_TRACKING: false
- # Clusters: ["cluster1-shard-00-00.abc123.mongodb.net"]
+ MAX_PAYLOAD_BYTESIZE: 4190208  # Maximum size (default is 4MB) of the chunk to be sent to sumo logic.
+ END_TIME_EPOCH_OFFSET_SECONDS: 120  # The collector assumes that all the log data will be available via API before (now - 2 minutes) ago.
+ BACKFILL_DAYS: 0  # Number of days before the event collection will start. If the value is 1, then events are fetched from yesterday to today. Atlas retains the last 30 days of log messages and system event audit messages. https://www.mongodb.com/docs/atlas/mongodb-logs/#view-and-download-mongodb-logs
+ DBNAME: "mongodbatlas"  # Change the DBNAME so that state (keys) maintained (bookkeeping) in the database (key value store) are not in conflict.
+ DB_DIR: ~/sumo  # When running locally the db is created in this directory
+ MIN_REQUEST_WINDOW_LENGTH: 60  # Minimum window length for the request window in seconds.
+ MAX_REQUEST_WINDOW_LENGTH: 900  # Maximum window length for the request window in seconds.
+ ACTIVATE_TIME_AND_MEMORY_TRACKING: false  # Set this to true for logging memory and time based logging.
+ # Clusters: ["cluster1"]  # User provided list of cluster aliases for selecting specific clusters. By default, it selects all the clusters.
 
 DeployMetaData:
  PACKAGENAME: "sumologic-mongodb-atlas"
@@ -91,6 +91,7 @@ DeployMetaData:
  ENABLE_LAYER: false
 
 SumoLogic:
- HTTP_LOGS_ENDPOINT: null
- HTTP_METRICS_ENDPOINT: null
+ HTTP_LOGS_ENDPOINT: null  # HTTP source endpoint url created in Sumo Logic for ingesting Logs.
+ HTTP_METRICS_ENDPOINT: null  # HTTP source endpoint url created in Sumo Logic for ingesting Metrics.
+
 

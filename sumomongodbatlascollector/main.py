@@ -99,19 +99,28 @@ class MongoDBAtlasCollector(BaseCollector):
             "params": {"itemsPerPage": self.api_config["PAGINATION_LIMIT"]},
         }
         all_data = self.getpaginateddata(url, **kwargs)
-        process_ids = [obj["id"] for data in all_data for obj in data["results"]]
-        hostnames = [obj["hostname"] for data in all_data for obj in data["results"]]
-        # 'port': 27017, 'replicaSetName': 'M10AWSTestCluster-config-0', 'typeName': 'SHARD_CONFIG_PRIMARY'
+        all_cluster_aliases = list({self._get_cluster_name(obj["userAlias"]) for data in all_data for obj in data["results"]})
         user_provided_clusters = self._get_user_provided_cluster_name()
-        cluster_mapping = {}
+
         if len(user_provided_clusters) > 0:
+            cluster_mapping = {}
+            process_ids = set()
+            hostnames = set()
             for obj in all_data:
                 for obj in obj["results"]:
-                    if obj["hostname"] in user_provided_clusters:
-                        cluster_mapping[self._get_cluster_name(obj["hostname"])] = (
-                            self._get_cluster_name(obj["userAlias"])
-                        )
+                    cluster_alias = self._get_cluster_name(obj["userAlias"])
+                    if cluster_alias in user_provided_clusters:
+                        cluster_mapping[self._get_cluster_name(obj["hostname"])] = cluster_alias
+                        process_ids.add(obj['id'])
+                        hostnames.add(obj['hostname'])
+
+            if not cluster_mapping:
+                raise Exception(f"None of the user provided cluster matched the following cluster aliases: {",".join(all_cluster_aliases)}")
+            process_ids = list(process_ids)
+            hostnames = list(hostnames)
         else:
+            process_ids = list({obj["id"] for data in all_data for obj in data["results"]})
+            hostnames = list({obj["hostname"] for data in all_data for obj in data["results"]})
             cluster_mapping = {
                 self._get_cluster_name(obj["hostname"]): self._get_cluster_name(
                     obj["userAlias"]
@@ -119,7 +128,7 @@ class MongoDBAtlasCollector(BaseCollector):
                 for data in all_data
                 for obj in data["results"]
             }
-        hostnames = list(set(hostnames))
+
         return process_ids, hostnames, cluster_mapping
 
     def _get_all_disks_from_host(self, process_ids):
@@ -336,11 +345,6 @@ class MongoDBAtlasCollector(BaseCollector):
         else:
             if not self.is_process_running(["sumomongodbatlascollector"]):
                 self.kvstore.release_lock_on_expired_key(self.SINGLE_PROCESS_LOCK_KEY, expiry_min=10)
-
-    # def execute_api_with_logging(self, apiobj):
-    #     api_type = str(apiobj.__class__.__name__)
-    #     result = apiobj.fetch()
-    #     return result
 
     def test(self):
         if self.is_running():
