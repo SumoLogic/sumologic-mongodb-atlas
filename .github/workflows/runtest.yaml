@@ -9,17 +9,17 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Set up Python 3.10
+      - name: Set up Python 3.12
         uses: actions/setup-python@v5
         with:
-          python-version: '3.10'
+          python-version: '3.12'
 
       - name: Install dev dependencies
         run: python -m pip install -U pip flake8 bandit mypy
 
       - name: Run Security Tests
         run: |
-          bandit -c .bandit -r sumomongodbatlascollector/ -f custom
+          bandit -r sumomongodbatlascollector/ --skip B101,B105,B108,B113,B311,B314,B405,B404,B501,B506,B602,B604,B605,B607,B608
 
       - name: Run Linting Tests
         run: |
@@ -34,17 +34,44 @@ jobs:
       #     mypy --install-types ./api.py
       #     mypy ./api.py --disable-error-code=import-untyped
 
-  run-test:
+  build-test:
     name: "Run Build and Install Tests"
     runs-on: "ubuntu-latest"
 
     steps:
       - uses: actions/checkout@v4
 
-      - name: Set up Python 3.10
+      - name: Set up Python 3.12
         uses: actions/setup-python@v5
         with:
-          python-version: '3.10'
+          python-version: 3.12
+
+      - name: Install build dependencies
+        run: |
+          python -m pip install -U pip wheel setuptools
+      - name: "Build"
+        run: |
+          python setup.py sdist bdist_wheel
+
+      - name: "Install"
+        run: |
+          pip install dist/sumologic_mongodb_atlas*.whl
+
+      - name: "Test CLITool version command"
+        run: |
+          sumomongodbatlascollector version
+
+  run-test:
+    name: "Run Tests"
+    runs-on: "ubuntu-latest"
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
 
       - name: Install build and test dependencies
         run: |
