@@ -48,25 +48,25 @@ class TimeAndMemoryTracker:
                 })
             return self._format_end_message(entry)
         else:
-            return f"{operation_name.lower()} completed "
+            return ""
 
     def _format_start_message(self, entry: Dict[str, Any]) -> str:
         if self.activate:
             return (
-                f"Starting {entry['operation_name']} start_time: {entry['start_time']:.2f} "
-                f"initial_memory_mb: {entry['start_memory'] / 1024 / 1024:.2f}"
+                f"operation_name: {entry['operation_name']} start_time: {entry['start_time']:.3f} "
+                f"initial_memory_mb: {entry['start_memory'] / 1024 / 1024:.2f} "
             )
         else:
-            return f"Starting {entry['operation_name']} "
+            return ""
 
     def _format_end_message(self, entry: Dict[str, Any]) -> str:
         if self.activate:
-            execution_time = exit_time - entry["start_time"]
-            memory_used = exit_memory - entry["start_memory"]
+            execution_time = entry['exit_time'] - entry["start_time"]
+            memory_used = entry['exit_memory'] - entry["start_memory"]
             return (
-                f"Completed {entry['operation_name']} execution_seconds: {execution_time:.2f}"
-                f"memory_used_mb: {memory_used / 1024 / 1024:.2f}"
-                f"start_time: {entry['start_time']:.2f}, end_time: {exit_time:.2f}, final_memory_mb: {exit_memory / 1024 / 1024:.2f}"
+                f"operation_name: {entry['operation_name']} execution_seconds: {execution_time:.3f} "
+                f"memory_used_mb: {memory_used / 1024 / 1024:.2f} "
+                f"start_time: {entry['start_time']:.3f}, end_time: {entry['exit_time']:.3f}, final_memory_mb: {entry['exit_memory'] / 1024 / 1024:.2f} "
             )
         else:
-            return f"Completed {entry['operation_name']} "
+            return ""

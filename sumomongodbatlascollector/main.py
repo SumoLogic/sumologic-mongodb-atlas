@@ -320,7 +320,7 @@ class MongoDBAtlasCollector(BaseCollector):
                     start_message = tracker.start("self.build_task_params")
                     task_params = self.build_task_params()
                     end_message = tracker.end("self.build_task_params")
-                    self.log.info(f'''Building Task Params end_message: {end_message}''')
+                    self.log.info(f'''Building Task Params {start_message} {end_message}''')
                     shuffle(task_params)
                     all_futures = {}
                     self.log.debug("spawning %d workers" % self.config["Collection"]["NUM_WORKERS"])
