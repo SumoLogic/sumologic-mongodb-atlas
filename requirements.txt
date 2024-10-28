@@ -1,4 +1,3 @@
 sumologic-appclient-sdk==2.0.10
 requests>=2.32.3
 future_fstrings==1.2.0
-setuptools  # for getting version in sumoappclient/sumoclient/base.py:19
