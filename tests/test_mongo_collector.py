@@ -25,8 +25,8 @@ def mock_config():
             "NUM_WORKERS": 2,
             "TIMEOUT": 30,
             "Clusters": [
-                "cluster1-shard-00-00.abc123.mongodb.net",
-                "cluster2-shard-00-00.xyz789.mongodb.net",
+                "Cluster2",
+                "Cluster1",
             ],
             "DATA_REFRESH_TIME": 3600000,
         },
@@ -121,10 +121,10 @@ def test_get_cluster_name(mongodb_atlas_collector):
 
 
 def test_get_user_provided_cluster_name(mongodb_atlas_collector):
-    assert mongodb_atlas_collector._get_user_provided_cluster_name() == [
-        "cluster1-shard-00-00.abc123.mongodb.net",
-        "cluster2-shard-00-00.xyz789.mongodb.net",
-    ]
+    assert set(mongodb_atlas_collector._get_user_provided_cluster_name()) == set([
+        "Cluster2",
+        "Cluster1",
+    ])
 
     mongodb_atlas_collector.collection_config.pop("Clusters")
     assert mongodb_atlas_collector._get_user_provided_cluster_name() == []
@@ -212,11 +212,11 @@ def test_get_all_processes_from_project(mock_getpaginateddata, mongodb_atlas_col
         mongodb_atlas_collector._get_all_processes_from_project()
     )
 
-    assert process_ids == ["process1", "process2"]
-    assert set(hostnames) == {
+    assert set(process_ids) == set(["process1", "process2"])
+    assert set(hostnames) == set([
         "cluster1-shard-00-00.abc123.mongodb.net",
         "cluster2-shard-00-00.xyz789.mongodb.net",
-    }
+    ])
     assert cluster_mapping == {"cluster1": "Cluster1", "cluster2": "Cluster2"}
 
     expected_url = f"{mongodb_atlas_collector.api_config['BASE_URL']}/groups/{mongodb_atlas_collector.api_config['PROJECT_ID']}/processes"
@@ -260,12 +260,11 @@ def test_get_all_processes_from_project_with_user_provided_clusters(
         mongodb_atlas_collector._get_all_processes_from_project()
     )
 
-    assert process_ids == ["process1", "process2", "process3"]
-    assert set(hostnames) == {
+    assert set(process_ids) == set(["process1", "process2"])
+    assert set(hostnames) == set([
         "cluster1-shard-00-00.abc123.mongodb.net",
-        "cluster2-shard-00-00.xyz789.mongodb.net",
-        "cluster3-shard-00-00.def456.mongodb.net",
-    }
+        "cluster2-shard-00-00.xyz789.mongodb.net"
+    ])
     assert cluster_mapping == {"cluster1": "Cluster1", "cluster2": "Cluster2"}
 
     expected_url = f"{mongodb_atlas_collector.api_config['BASE_URL']}/groups/{mongodb_atlas_collector.api_config['PROJECT_ID']}/processes"
