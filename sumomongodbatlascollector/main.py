@@ -115,7 +115,7 @@ class MongoDBAtlasCollector(BaseCollector):
                         hostnames.add(obj['hostname'])
 
             if not cluster_mapping:
-                raise Exception(f"None of the user provided cluster matched the following cluster aliases: {",".join(all_cluster_aliases)}")
+                raise Exception(f"None of the user provided cluster matched the following cluster aliases: {','.join(all_cluster_aliases)}")
             process_ids = list(process_ids)
             hostnames = list(hostnames)
         else:
