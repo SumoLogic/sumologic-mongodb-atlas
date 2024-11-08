@@ -48,7 +48,7 @@ Parameters:
 Resources:
   MongoDBAtlasFunction:
     Properties:
-      CodeUri: ./target/aws/build/
+      CodeUri: ./sumomongodbatlascollector
       Environment:
         Variables:
           DBNAME:

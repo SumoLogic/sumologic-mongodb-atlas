@@ -1,0 +1,45 @@
+version = 0.1
+
+[default.build]
+[default.build.parameters]
+cached = true
+parallel = true
+debug=true
+use_container=true
+
+[default.package]
+[default.package.parameters]
+output_template_file="packaged.yaml"
+s3_prefix="MongoDBAtlas/v1.0.18"
+region="us-east-1"
+s3_bucket="appdevstore-test"
+
+[default.deploy.parameters]
+capabilities = "CAPABILITY_IAM"
+confirm_changeset = true
+stack_name="testingMongoDBAtlas"
+parameter_overrides="HttpLogsEndpoint=<http logs source endpoint> HttpMetricsEndpoint=<http metrics source endpoint> OrganizationId=<mongodbatlas org id> PrivateApiKey=<mongodbatlas private api key> ProjectId=<mongodb atlas cluster project id> PublicApiKey=<mongodbatlas public api key>"
+s3_prefix="MongoDBAtlas/v1.0.18"
+region="us-east-1"
+s3_bucket="appdevstore-test"
+
+[default.publish.parameters]
+template="packaged.yaml"
+region="us-east-1"
+
+[default.sync.parameters]
+watch = true
+
+[default.local_start_api.parameters]
+warm_containers = "EAGER"
+
+[default.local_invoke.parameters]
+parameter_overrides="ENVIRONMENT=onprem HttpLogsEndpoint=<http logs source endpoint> HttpMetricsEndpoint=<http metrics source endpoint> OrganizationId=<mongodbatlas org id> PrivateApiKey=<mongodbatlas private api key> ProjectId=<mongodb atlas cluster project id> PublicApiKey=<mongodbatlas public api key>"
+
+# https://github.com/aws/aws-sam-cli/issues/5492
+# Allow specification of parameters that should apply to all (or multiple) environments in AWS SAM CLI configuration file (samconfig.toml)
+
+[prod]
+[prod.sync]
+[prod.sync.parameters]
+watch = false
