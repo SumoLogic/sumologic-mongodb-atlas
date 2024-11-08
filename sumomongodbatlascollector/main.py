@@ -1,9 +1,5 @@
-# -*- coding: future_fstrings -*-
-
 import traceback
 import os
-from concurrent import futures
-from random import shuffle
 from requests.auth import HTTPDigestAuth
 from time_and_memory_tracker import TimeAndMemoryTracker
 
@@ -26,6 +22,7 @@ class MongoDBAtlasCollector(BaseCollector):
     Design Doc: https://docs.google.com/document/d/15TgilyyuGTMjRIZUXVJa1UhpTu3wS-gMl-dDsXAV2gw/edit?usp=sharing
     """
 
+    COLLECTOR_PROCESS_NAME = "sumomongodbatlascollector"
     SINGLE_PROCESS_LOCK_KEY = "is_mongodbatlascollector_running"
     CONFIG_FILENAME = "mongodbatlas.yaml"
     DATA_REFRESH_TIME = 60 * 60 * 1000
@@ -34,6 +31,7 @@ class MongoDBAtlasCollector(BaseCollector):
         self.project_dir = self.get_current_dir()
         super(MongoDBAtlasCollector, self).__init__(self.project_dir)
         self.api_config = self.config["MongoDBAtlas"]
+
         self.digestauth = HTTPDigestAuth(
             username=self.api_config["PUBLIC_API_KEY"],
             password=self.api_config["PRIVATE_API_KEY"],
@@ -42,6 +40,10 @@ class MongoDBAtlasCollector(BaseCollector):
             MAX_RETRY=self.collection_config["MAX_RETRY"],
             BACKOFF_FACTOR=self.collection_config["BACKOFF_FACTOR"],
         )
+        # removing redundant handlers since AWS Lambda also sets up a handler, on the root logger
+        if self.collection_config["ENVIRONMENT"] == "aws":
+            for hdlr in self.log.handlers:
+                self.log.removeHandler(hdlr)
 
     def get_current_dir(self):
         cur_dir = os.path.dirname(__file__)
@@ -100,19 +102,28 @@ class MongoDBAtlasCollector(BaseCollector):
             "params": {"itemsPerPage": self.api_config["PAGINATION_LIMIT"]},
         }
         all_data = self.getpaginateddata(url, **kwargs)
-        process_ids = [obj["id"] for data in all_data for obj in data["results"]]
-        hostnames = [obj["hostname"] for data in all_data for obj in data["results"]]
-        # 'port': 27017, 'replicaSetName': 'M10AWSTestCluster-config-0', 'typeName': 'SHARD_CONFIG_PRIMARY'
+        all_cluster_aliases = list({self._get_cluster_name(obj["userAlias"]) for data in all_data for obj in data["results"]})
         user_provided_clusters = self._get_user_provided_cluster_name()
-        cluster_mapping = {}
-        if len(user_provided_clusters) > 0:
+
+        if len(all_cluster_aliases) > 0 and len(user_provided_clusters) > 0:
+            cluster_mapping = {}
+            process_ids = set()
+            hostnames = set()
             for obj in all_data:
                 for obj in obj["results"]:
-                    if obj["hostname"] in user_provided_clusters:
-                        cluster_mapping[self._get_cluster_name(obj["hostname"])] = (
-                            self._get_cluster_name(obj["userAlias"])
-                        )
+                    cluster_alias = self._get_cluster_name(obj["userAlias"])
+                    if cluster_alias in user_provided_clusters:
+                        cluster_mapping[self._get_cluster_name(obj["hostname"])] = cluster_alias
+                        process_ids.add(obj['id'])
+                        hostnames.add(obj['hostname'])
+
+            if not cluster_mapping:
+                raise Exception(f"None of the user provided cluster matched the following cluster aliases: {','.join(all_cluster_aliases)}")
+            process_ids = list(process_ids)
+            hostnames = list(hostnames)
         else:
+            process_ids = list({obj["id"] for data in all_data for obj in data["results"]})
+            hostnames = list({obj["hostname"] for data in all_data for obj in data["results"]})
             cluster_mapping = {
                 self._get_cluster_name(obj["hostname"]): self._get_cluster_name(
                     obj["userAlias"]
@@ -120,7 +131,7 @@ class MongoDBAtlasCollector(BaseCollector):
                 for data in all_data
                 for obj in data["results"]
             }
-        hostnames = list(set(hostnames))
+
         return process_ids, hostnames, cluster_mapping
 
     def _get_all_disks_from_host(self, process_ids):
@@ -222,15 +233,9 @@ class MongoDBAtlasCollector(BaseCollector):
         process_ids, hostnames = processes["process_ids"], processes["hostnames"]
         return process_ids, hostnames
 
-    def is_running(self):
-        self.log.debug("Acquiring single instance lock")
-        return self.kvstore.acquire_lock(self.SINGLE_PROCESS_LOCK_KEY)
-
-    def stop_running(self):
-        self.log.debug("Releasing single instance lock")
-        return self.kvstore.release_lock(self.SINGLE_PROCESS_LOCK_KEY)
-
     def build_task_params(self):
+        with TimeAndMemoryTracker(activate=self.collection_config.get("ACTIVATE_TIME_AND_MEMORY_TRACKING", False)) as tracker:
+            start_message = tracker.start("self.build_task_params")
         audit_files = ["mongodb-audit-log.gz", "mongos-audit-log.gz"]
         dblog_files = ["mongodb.gz", "mongos.gz"]
         filenames = []
@@ -301,57 +306,10 @@ class MongoDBAtlasCollector(BaseCollector):
                                 cluster_mapping,
                             )
                         )
-        self.log.info("%d Tasks Generated" % len(tasks))
+
+        end_message = tracker.end("self.build_task_params")
+        self.log.info(f'''{len(tasks)} Tasks Generated {start_message} {end_message}''')
         return tasks
-
-    def run(self):
-        if self.is_running():
-            try:
-                self.log.info("Starting MongoDB Atlas Forwarder...")
-                with TimeAndMemoryTracker(activate=True) as tracker:
-                    start_message = tracker.start("self.build_task_params")
-                    task_params = self.build_task_params()
-                    end_message = tracker.end("self.build_task_params")
-                    self.log.info(f'''Building Task Params end_message: {end_message}''')
-                    shuffle(task_params)
-                    all_futures = {}
-                    self.log.debug("spawning %d workers" % self.config["Collection"]["NUM_WORKERS"])
-                    with futures.ThreadPoolExecutor(
-                        max_workers=self.config["Collection"]["NUM_WORKERS"]
-                    ) as executor:
-                        results = {executor.submit(apiobj.fetch): apiobj for apiobj in task_params}
-                        all_futures.update(results)
-                    for future in futures.as_completed(all_futures):
-                        param = all_futures[future]
-                        api_type = str(param)
-                        try:
-                            future.result()
-                            obj = self.kvstore.get(api_type)
-                        except Exception as exc:
-                            self.log.error(f"API Type: {api_type} thread generated an exception: {exc}", exc_info=True,)
-                        else:
-                            self.log.info(f"API Type: {api_type} thread completed {obj}")
-            finally:
-                self.stop_running()
-                self.mongosess.close()
-        else:
-            if not self.is_process_running(["sumomongodbatlascollector"]):
-                self.kvstore.release_lock_on_expired_key(self.SINGLE_PROCESS_LOCK_KEY, expiry_min=10)
-
-    # def execute_api_with_logging(self, apiobj):
-    #     api_type = str(apiobj.__class__.__name__)
-    #     result = apiobj.fetch()
-    #     return result
-
-    def test(self):
-        if self.is_running():
-            task_params = self.build_task_params()
-            shuffle(task_params)
-            try:
-                for apiobj in task_params:
-                    apiobj.fetch()
-            finally:
-                self.stop_running()
 
 
 def main(*args, **kwargs):

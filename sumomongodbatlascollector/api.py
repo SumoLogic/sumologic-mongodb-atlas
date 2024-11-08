@@ -1,14 +1,9 @@
-# -*- coding: future_fstrings -*-
-
 import gzip
 import json
 import os
-# import psutil
-# import tracemalloc
 from io import BytesIO
 import time
 from requests.auth import HTTPDigestAuth
-# import dateutil
 from sumoappclient.sumoclient.base import BaseAPI
 from sumoappclient.sumoclient.factory import OutputHandlerFactory
 from sumoappclient.common.utils import (
@@ -69,21 +64,16 @@ class MongoDBAPI(BaseAPI):
 class FetchMixin(MongoDBAPI):
     def fetch(self):
         log_type = self.get_key()
-        with TimeAndMemoryTracker(activate=True) as tracker:
-            start_message = tracker.start("OutputHandlerFactory.get_handler")
-            self.log.info(start_message)
+        with TimeAndMemoryTracker(activate=self.collection_config.get("ACTIVATE_TIME_AND_MEMORY_TRACKING", False)) as tracker:
             output_handler = OutputHandlerFactory.get_handler(
                 self.collection_config["OUTPUT_HANDLER"],
                 path=self.pathname,
                 config=self.config,
             )
-
-            end_message = tracker.end("OutputHandlerFactory.get_handler")
-            self.log.info(end_message)
             start_message = tracker.start("self.build_fetch_params")
             url, kwargs = self.build_fetch_params()
             end_message = tracker.end("self.build_fetch_params")
-            self.log.info(f'''Fetching LogType: {log_type} kwargs: {kwargs} url: {url} end_message: {end_message}''')
+            self.log.info(f'''Fetching LogType: {log_type} kwargs: {kwargs} url: {url} {start_message} {end_message}''')
             state = None
             payload = []
             try:
@@ -97,26 +87,23 @@ class FetchMixin(MongoDBAPI):
                     BACKOFF_FACTOR=self.collection_config["BACKOFF_FACTOR"],
                     **kwargs,
                 )
-                self.log.info(f'''Fetching LogType: {log_type} kwargs: {kwargs} url: {url} end_message: {start_message}''')
                 end_message = tracker.end("ClientMixin.make_request")
-                self.log.info(end_message)
+                self.log.debug(f'''Fetched LogType: {log_type} kwargs: {kwargs} url: {url} {start_message} {end_message}''')
                 if fetch_success and len(content) > 0:
                     payload, state = self.transform_data(content)
                     # Todo Make this atomic if after sending -> Ctrl - C happens then it fails to save state
                     params = self.build_send_params()
                     start_message = tracker.start("OutputHandler.send")
-                    self.log.info(f'''Sending LogType: {self.get_key()} Data: {len(content)} url: {url} start_message: {start_message}''')
                     send_success = output_handler.send(payload, **params)
                     end_message = tracker.end("OutputHandler.send")
-                    self.log.info(f'''Sending LogType: {self.get_key()} Data: {len(content)} kwargs: {kwargs} url: {url} end_message: {end_message}''')
                     if send_success:
                         self.save_state(**state)
-                        self.log.info(f"""Successfully sent LogType: {self.get_key()} Data: {len(content)}""")
+                        self.log.info(f"""Successfully sent LogType: {self.get_key()} Data: {len(content)} kwargs: {kwargs} url: {url} {start_message} {end_message}""")
                     else:
-                        self.log.error(f"""Failed to send LogType: {self.get_key()}""")
+                        self.log.error(f"""Failed to send LogType: {self.get_key()} Data: {len(content)} kwargs: {kwargs} url: {url} {start_message} {end_message}""")
                 elif fetch_success and len(content) == 0:
                     self.log.info(
-                        f"""No results window LogType: {log_type} kwargs: {kwargs} status: {fetch_success} url: {url}"""
+                        f"""No results window LogType: {log_type} status: {fetch_success} kwargs: {kwargs} url: {url}"""
                     )
                     is_move_fetch_window, new_state = self.check_move_fetch_window(kwargs)
                     if is_move_fetch_window:
@@ -136,22 +123,20 @@ class FetchMixin(MongoDBAPI):
 class PaginatedFetchMixin(MongoDBAPI):
     def fetch(self):
         current_state = self.get_state()
-        with TimeAndMemoryTracker(activate=True) as tracker:
+        with TimeAndMemoryTracker(activate=self.collection_config.get("ACTIVATE_TIME_AND_MEMORY_TRACKING", False)) as tracker:
             output_handler = OutputHandlerFactory.get_handler(self.collection_config["OUTPUT_HANDLER"], path=self.pathname, config=self.config)
             start_message = tracker.start("self.build_fetch_params")
             url, kwargs = self.build_fetch_params()
             end_message = tracker.end("self.build_fetch_params")
             log_type = self.get_key()
-            self.log.info(f'''Fetching LogType: {log_type} kwargs: {kwargs} url: {url} end_message: {end_message} ''')
+            self.log.info(f'''Fetching LogType: {log_type} kwargs: {kwargs} url: {url} {start_message} {end_message} ''')
             next_request = True
             count = 0
-            start_message = tracker.start("ClientMixin.get_new_session")
             sess = ClientMixin.get_new_session()
-            end_message = tracker.end("ClientMixin.get_new_session")
-            self.log.info(f'''Fetching LogType: {log_type} kwargs: {kwargs} url: {url} end_message: {end_message} ''')
             try:
                 while next_request:
                     send_success = has_next_page = False
+                    start_message = tracker.start("ClientMixin.make_request")
                     status, data = ClientMixin.make_request(
                         url,
                         method="get",
@@ -162,7 +147,10 @@ class PaginatedFetchMixin(MongoDBAPI):
                         BACKOFF_FACTOR=self.collection_config["BACKOFF_FACTOR"],
                         **kwargs,
                     )
+                    end_message = tracker.end("ClientMixin.make_request")
                     fetch_success = status and "results" in data
+                    if (count < 4) or (count % 5 == 0):
+                        self.log.info(f'''Fetched LogType: {log_type} kwargs: {kwargs} url: {url} {start_message} {end_message}''')
                     if fetch_success:
                         has_next_page = len(data["results"]) > 0
                         if has_next_page:
@@ -173,9 +161,10 @@ class PaginatedFetchMixin(MongoDBAPI):
                             end_message = tracker.end("OutputHandler.send")
                             if send_success:
                                 count += 1
-                                self.log.debug(
-                                    f"""Successfully sent LogType: {log_type} Page: {kwargs['params']['pageNum']}  Datalen: {len(payload)} starttime: {kwargs['params']['minDate']} endtime: {kwargs['params']['maxDate']} end_message: {end_message}"""
-                                )
+                                if (count < 4) or (count % 5 == 0):
+                                    self.log.info(
+                                        f"""Successfully sent LogType: {log_type} Page: {kwargs['params']['pageNum']}  Datalen: {len(payload)} starttime: {kwargs['params']['minDate']} endtime: {kwargs['params']['maxDate']} {start_message} {end_message}"""
+                                    )
                                 kwargs["params"]["pageNum"] += 1
                                 # save and update last_time_epoch required for next invocation
                                 current_state.update(updated_state)
@@ -198,7 +187,7 @@ class PaginatedFetchMixin(MongoDBAPI):
                             else:
                                 # show err unable to send save current state
                                 self.log.error(
-                                    f"""Failed to send LogType: {log_type} Page: {kwargs['params']['pageNum']} starttime: {kwargs['params']['minDate']} endtime: {kwargs['params']['maxDate']}"""
+                                    f"""Failed to send LogType: {log_type} Page: {kwargs['params']['pageNum']} starttime: {kwargs['params']['minDate']} endtime: {kwargs['params']['maxDate']} {start_message} {end_message}"""
                                 )
                                 self.save_state(
                                     {
@@ -407,7 +396,7 @@ class ProcessMetricsAPI(FetchMixin):
         self.cluster_mapping = cluster_mapping
 
     def get_key(self):
-        key = f"""{self.api_config['PROJECT_ID']}-{self.process_id}"""
+        key = f"""{self.api_config['PROJECT_ID']}-{self.process_id}-processmetrics"""
         return key
 
     def save_state(self, last_time_epoch):
@@ -502,7 +491,7 @@ class DiskMetricsAPI(FetchMixin):
         self.cluster_mapping = cluster_mapping
 
     def get_key(self):
-        key = f"""{self.api_config['PROJECT_ID']}-{self.process_id}-{self.disk_name}"""
+        key = f"""{self.api_config['PROJECT_ID']}-{self.process_id}-{self.disk_name}-diskmetrics"""
         return key
 
     def save_state(self, last_time_epoch):
@@ -597,7 +586,7 @@ class DatabaseMetricsAPI(FetchMixin):
         self.cluster_mapping = cluster_mapping
 
     def get_key(self):
-        key = f"""{self.api_config['PROJECT_ID']}-{self.process_id}-{self.database_name}"""
+        key = f"""{self.api_config['PROJECT_ID']}-{self.process_id}-{self.database_name}-dbmetrics"""
         return key
 
     def save_state(self, last_time_epoch):
@@ -939,6 +928,8 @@ class AlertsAPI(MongoDBAPI):
                     BACKOFF_FACTOR=self.collection_config["BACKOFF_FACTOR"],
                     **kwargs,
                 )
+                if count < 4 or (count % 5 == 0):
+                    self.log.info(f'''Fetched LogType: {log_type} kwargs: {kwargs} url: {url}''')
                 fetch_success = status and "results" in data
                 if fetch_success:
                     has_next_page = len(data["results"]) > 0
@@ -949,9 +940,10 @@ class AlertsAPI(MongoDBAPI):
                         )
                         if send_success:
                             count += 1
-                            self.log.debug(
-                                f"""Successfully sent LogType: {log_type} Project: {self.api_config['PROJECT_ID']} Alerts Page: {kwargs['params']['pageNum']}  Datalen: {len(payload)} """
-                            )
+                            if count < 4 or (count % 5 == 0):
+                                self.log.info(
+                                    f"""Successfully sent LogType: {log_type} Project: {self.api_config['PROJECT_ID']} Alerts Page: {kwargs['params']['pageNum']}  Datalen: {len(payload)} """
+                                )
                             current_state.update(updated_state)
                             if current_state["last_page_offset"] == 0:
                                 # do not increase if num alerts < page limit

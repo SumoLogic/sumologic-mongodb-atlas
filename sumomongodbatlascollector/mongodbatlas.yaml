@@ -1,7 +1,7 @@
 MongoDBAtlas:
  BASE_URL: "https://cloud.mongodb.com/api/atlas/v1.0"
  FETCH_METHOD: get
- PAGINATION_LIMIT: 500
+ PAGINATION_LIMIT: 500  # Number of events to fetch in a single API call.
  ORGANIZATION_ID: null
  PROJECT_ID: null
  PUBLIC_API_KEY: null
@@ -12,7 +12,7 @@ MongoDBAtlas:
   - EVENTS_PROJECT
   - EVENTS_ORG
  METRIC_TYPES:
-  PROCESS_METRICS:
+  PROCESS_METRICS:  # Query Parameter m in API: https://www.mongodb.com/docs/atlas/reference/api-resources-spec/v1/#tag/Monitoring-and-Logs/operation/getHostMeasurements. Commented ones are not used in the app. If you do not want to collect any of the metrics then comment all of them and provide empty list [] as value.
     - CACHE_DIRTY_BYTES
     - CACHE_USED_BYTES
     - CONNECTIONS
@@ -46,43 +46,172 @@ MongoDBAtlas:
     - SYSTEM_NORMALIZED_CPU_KERNEL
     - SYSTEM_NORMALIZED_CPU_STEAL
     - SYSTEM_NORMALIZED_CPU_USER
-  DISK_METRICS:
+    # - ASSERT_MSG
+    # - ASSERT_MSG
+    # - ASSERT_REGULAR
+    # - ASSERT_USER
+    # - ASSERT_WARNING
+    # - BACKGROUND_FLUSH_AVG
+    # - CACHE_BYTES_READ_INTO
+    # - CACHE_BYTES_WRITTEN_FROM
+    # - CACHE_FILL_RATIO
+    # - COMPUTED_MEMORY
+    # - DIRTY_FILL_RATIO
+    # - DOCUMENT_METRICS_DELETED
+    # - DOCUMENT_METRICS_INSERTED
+    # - DOCUMENT_METRICS_RETURNED
+    # - DOCUMENT_METRICS_UPDATED
+    # - FTS_DISK_UTILIZATION
+    # - FTS_MEMORY_MAPPED
+    # - FTS_MEMORY_RESIDENT
+    # - FTS_MEMORY_VIRTUAL
+    # - FTS_PROCESS_CPU_KERNEL
+    # - FTS_PROCESS_CPU_USER
+    # - FTS_PROCESS_NORMALIZED_CPU_KERNEL
+    # - FTS_PROCESS_NORMALIZED_CPU_USER
+    # - GLOBAL_ACCESSES_NOT_IN_MEMORY
+    # - GLOBAL_LOCK_CURRENT_QUEUE_READERS
+    # - GLOBAL_LOCK_CURRENT_QUEUE_WRITERS
+    # - GLOBAL_PAGE_FAULT_EXCEPTIONS_THROWN
+    # - INDEX_COUNTERS_BTREE_ACCESSES
+    # - INDEX_COUNTERS_BTREE_HITS
+    # - INDEX_COUNTERS_BTREE_MISS_RATIO
+    # - INDEX_COUNTERS_BTREE_MISSES
+    # - JOURNALING_COMMITS_IN_WRITE_LOCK
+    # - JOURNALING_MB
+    # - JOURNALING_WRITE_DATA_FILES_MB
+    # - MAX_PROCESS_CPU_CHILDREN_KERNEL
+    # - MAX_PROCESS_CPU_CHILDREN_USER
+    # - MAX_PROCESS_CPU_KERNEL
+    # - MAX_PROCESS_CPU_USER
+    # - MAX_PROCESS_NORMALIZED_CPU_CHILDREN_KERNEL
+    # - MAX_PROCESS_NORMALIZED_CPU_CHILDREN_USER
+    # - MAX_PROCESS_NORMALIZED_CPU_KERNEL
+    # - MAX_PROCESS_NORMALIZED_CPU_USER
+    # - MAX_SWAP_USAGE_FREE
+    # - MAX_SWAP_USAGE_USED
+    # - MAX_SYSTEM_CPU_GUEST
+    # - MAX_SYSTEM_CPU_IOWAIT
+    # - MAX_SYSTEM_CPU_IRQ
+    # - MAX_SYSTEM_CPU_KERNEL
+    # - MAX_SYSTEM_CPU_SOFTIRQ
+    # - MAX_SYSTEM_CPU_STEAL
+    # - MAX_SYSTEM_CPU_USER
+    # - MAX_SYSTEM_MEMORY_AVAILABLE
+    # - MAX_SYSTEM_MEMORY_FREE
+    # - MAX_SYSTEM_MEMORY_USED
+    # - MAX_SYSTEM_NETWORK_IN
+    # - MAX_SYSTEM_NETWORK_OUT
+    # - MAX_SYSTEM_NORMALIZED_CPU_GUEST
+    # - MAX_SYSTEM_NORMALIZED_CPU_IOWAIT
+    # - MAX_SYSTEM_NORMALIZED_CPU_IRQ
+    # - MAX_SYSTEM_NORMALIZED_CPU_KERNEL
+    # - MAX_SYSTEM_NORMALIZED_CPU_NICE
+    # - MAX_SYSTEM_NORMALIZED_CPU_SOFTIRQ
+    # - MAX_SYSTEM_NORMALIZED_CPU_STEAL
+    # - MAX_SYSTEM_NORMALIZED_CPU_USER
+    # - MEMORY_MAPPED
+    # - OPCOUNTER_REPL_CMD
+    # - OPCOUNTER_REPL_DELETE
+    # - OPCOUNTER_REPL_INSERT
+    # - OPCOUNTER_REPL_UPDATE
+    # - OPCOUNTER_TTL_DELETED
+    # - OPERATION_THROTTLING_REJECTED_OPERATIONS
+    # - OPERATIONS_QUERIES_KILLED
+    # - OPERATIONS_SCAN_AND_ORDER
+    # - OPLOG_MASTER_LAG_TIME_DIFF
+    # - OPLOG_MASTER_TIME
+    # - OPLOG_RATE_GB_PER_HOUR
+    # - OPLOG_REPLICATION_LAG
+    # - OPLOG_SLAVE_LAG_MASTER_TIME
+    # - PROCESS_CPU_CHILDREN_KERNEL
+    # - PROCESS_CPU_CHILDREN_USER
+    # - PROCESS_NORMALIZED_CPU_CHILDREN_KERNEL
+    # - PROCESS_NORMALIZED_CPU_CHILDREN_USER
+    # - PROCESS_NORMALIZED_CPU_KERNEL
+    # - PROCESS_NORMALIZED_CPU_USER
+    # - RESTARTS_IN_LAST_HOUR
+    # - SWAP_USAGE_FREE
+    # - SWAP_USAGE_USED
+    # - SYSTEM_CPU_GUEST
+    # - SYSTEM_CPU_IOWAIT
+    # - SYSTEM_CPU_IRQ
+    # - SYSTEM_CPU_KERNEL
+    # - SYSTEM_CPU_NICE
+    # - SYSTEM_CPU_SOFTIRQ
+    # - SYSTEM_CPU_STEAL
+    # - SYSTEM_CPU_USER
+    # - SYSTEM_MEMORY_AVAILABLE
+    # - SYSTEM_MEMORY_FREE
+    # - SYSTEM_MEMORY_USED
+    # - SYSTEM_NETWORK_IN
+    # - SYSTEM_NETWORK_OUT
+    # - SYSTEM_NORMALIZED_CPU_GUEST
+    # - SYSTEM_NORMALIZED_CPU_IOWAIT
+    # - SYSTEM_NORMALIZED_CPU_IRQ
+    # - SYSTEM_NORMALIZED_CPU_NICE
+    # - SYSTEM_NORMALIZED_CPU_SOFTIRQ
+    # - TICKETS_AVAILABLE_READS
+    # - TICKETS_AVAILABLE_WRITE
+  DISK_METRICS:  # Query Parameter m in API: https://www.mongodb.com/docs/atlas/reference/api-resources-spec/v1/#tag/Monitoring-and-Logs/operation/listDiskMeasurements. Commented ones are not used in the app. If you do not want to collect any of the metrics then comment all of them and provide empty list [] as value.
     - DISK_PARTITION_IOPS_READ
     - DISK_PARTITION_IOPS_WRITE
     - DISK_PARTITION_LATENCY_READ
     - DISK_PARTITION_LATENCY_WRITE
     - DISK_PARTITION_SPACE_PERCENT_FREE
     - DISK_PARTITION_SPACE_PERCENT_USED
-  DATABASE_METRICS:
+    # - MAX_DISK_PARTITION_IOPS_READ
+    # - DISK_PARTITION_IOPS_TOTAL
+    # - MAX_DISK_PARTITION_IOPS_TOTAL
+    # - MAX_DISK_PARTITION_LATENCY_READ
+    # - MAX_DISK_PARTITION_LATENCY_WRITE
+    # - DISK_PARTITION_SPACE_FREE
+    # - MAX_DISK_PARTITION_SPACE_FREE
+    # - DISK_PARTITION_SPACE_USED
+    # - MAX_DISK_PARTITION_SPACE_USED
+    # - MAX_DISK_PARTITION_SPACE_PERCENT_FREE
+    # - MAX_DISK_PARTITION_SPACE_PERCENT_USED
+    # - DISK_PARTITION_THROUGHPUT_READ
+    # - DISK_PARTITION_THROUGHPUT_WRITE
+    # - DISK_QUEUE_DEPTH
+  DATABASE_METRICS:  # Query Parameter m in API: https://www.mongodb.com/docs/atlas/reference/api-resources-spec/v1/#tag/Monitoring-and-Logs/operation/getDatabase. Commented ones are not used in the app. If you do not want to collect any of the metrics then comment all of them and provide empty list [] as value.
     - DATABASE_AVERAGE_OBJECT_SIZE
+    # - DATABASE_COLLECTION_COUNT
+    # - DATABASE_DATA_SIZE
+    # - DATABASE_STORAGE_SIZE
+    # - DATABASE_INDEX_SIZE
+    # - DATABASE_INDEX_COUNT
+    # - DATABASE_EXTENT_COUNT
+    # - DATABASE_OBJECT_COUNT
+    # - DATABASE_VIEW_COUNT
 
 Logging:
- LOG_FORMAT: "%(levelname)s | %(asctime)s | %(threadName)s | %(name)s | %(message)s"
+ LOG_FORMAT: "%(levelname)s | %(asctime)s | %(threadName)s | %(name)s | %(message)s"  # Log format used by the python logging module to write logs in a file.
  ROTATION_TYPE: D
  ROTATION_INTERVAL: 1
  BACKUP_COUNT: 7
- ENABLE_CONSOLE_LOG: true
- ENABLE_LOGFILE: true
- LOG_FILEPATH: /tmp/mongodbatlascollector.log
+ ENABLE_CONSOLE_LOG: true  # Enables printing logs in a console.
+ ENABLE_LOGFILE: true  # Set to TRUE to write all logs and errors to a log file.
+ LOG_FILEPATH: /tmp/mongodbatlascollector.log  # Path of the log file used when ENABLE_LOGFILE is set to TRUE.
  LOG_LEVEL: "INFO"
 
 Collection:
  ENVIRONMENT: onprem
- NUM_WORKERS: 2
+ NUM_WORKERS: 2  # Number of threads to spawn for API calls.
  OUTPUT_HANDLER: HTTP
- MAX_RETRY: 5
- BACKOFF_FACTOR: 1
- TIMEOUT: 90 # Increase to 2 minutes if the sumo server response time is slow
+ MAX_RETRY: 3  # Number of retries to attempt in case of request failure.
+ BACKOFF_FACTOR: 1  # A backoff factor to apply between attempts after the second try. If the backoff_factor is 0.1, then sleep() will sleep for [0.0s, 0.2s, 0.4s, ...] between retries.
+ TIMEOUT: 90 # Increase to 2 minutes if the sumo server response time is slow. This time out used by the requests library.
  COMPRESSED: true
- MAX_PAYLOAD_BYTESIZE: 4190208 #4MB
- END_TIME_EPOCH_OFFSET_SECONDS: 120
- BACKFILL_DAYS: 0 # Determines the start_time of the collection
- DBNAME: "mongodbatlas"
- DB_DIR: ~/sumo
- MIN_REQUEST_WINDOW_LENGTH: 60 # IN SECONDS
- MAX_REQUEST_WINDOW_LENGTH: 900 # IN SECONDS
- ACTIVATE_TIME_AND_MEMORY_TRACKING: False
- # Clusters: ["cluster1-shard-00-00.abc123.mongodb.net"]
+ MAX_PAYLOAD_BYTESIZE: 4190208  # Maximum size (default is 4MB) of the chunk to be sent to sumo logic.
+ END_TIME_EPOCH_OFFSET_SECONDS: 120  # The collector assumes that all the log data will be available via API before (now - 2 minutes) ago.
+ BACKFILL_DAYS: 0  # Number of days before the event collection will start. If the value is 1, then events are fetched from yesterday to today. Atlas retains the last 30 days of log messages and system event audit messages. https://www.mongodb.com/docs/atlas/mongodb-logs/#view-and-download-mongodb-logs
+ DBNAME: "mongodbatlas"  # Change the DBNAME so that state (keys) maintained (bookkeeping) in the database (key value store) are not in conflict.
+ DB_DIR: ~/sumo  # When running locally the db is created in this directory
+ MIN_REQUEST_WINDOW_LENGTH: 60  # Minimum window length for the request window in seconds.
+ MAX_REQUEST_WINDOW_LENGTH: 900  # Maximum window length for the request window in seconds.
+ ACTIVATE_TIME_AND_MEMORY_TRACKING: false  # Set this to true for logging memory and time based logging.
+ # Clusters: ["cluster1"]  # User provided list of cluster aliases for selecting specific clusters. By default, it selects all the clusters.
 
 DeployMetaData:
  PACKAGENAME: "sumologic-mongodb-atlas"
@@ -91,6 +220,7 @@ DeployMetaData:
  ENABLE_LAYER: false
 
 SumoLogic:
- HTTP_LOGS_ENDPOINT: null
- HTTP_METRICS_ENDPOINT: null
+ HTTP_LOGS_ENDPOINT: null  # HTTP source endpoint url created in Sumo Logic for ingesting Logs.
+ HTTP_METRICS_ENDPOINT: null  # HTTP source endpoint url created in Sumo Logic for ingesting Metrics.
+
 

@@ -5,7 +5,7 @@ import tracemalloc
 import time
 from unittest.mock import Mock, patch
 
-from api import (
+from sumomongodbatlascollector.api import (
     # AlertsAPI,
     DatabaseMetricsAPI,
     DiskMetricsAPI,
@@ -16,7 +16,7 @@ from api import (
     ProcessMetricsAPI,
     ProjectEventsAPI,
 )
-from main import MongoDBAtlasCollector
+from sumomongodbatlascollector.main import MongoDBAtlasCollector
 
 
 @patch("sumoappclient.sumoclient.base.BaseAPI")

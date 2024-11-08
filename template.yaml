@@ -18,7 +18,7 @@ Metadata:
     LicenseUrl: ./LICENSE
     Name: sumologic-mongodb-atlas
     ReadmeUrl: ./README.md
-    SemanticVersion: 1.0.17
+    SemanticVersion: 1.0.18
     SourceCodeUrl: https://github.com/SumoLogic/sumologic-mongodb-atlas
     SpdxLicenseId: Apache-2.0
 Outputs:
@@ -28,9 +28,10 @@ Outputs:
       Fn::GetAtt:
       - MongoDBAtlasFunction
       - Arn
-	MongoDBAtlasTable:
-			Description: MongoDBAtlasTable DynamoDB Table Name
-			Value: !Ref MongoDBAtlasTable
+  MongoDBAtlasTable:
+    Description: MongoDBAtlasTable DynamoDB Table Name
+    Value:
+      Ref: MongoDBAtlasTableResource
 Parameters:
   HttpLogsEndpoint:
     Type: String
@@ -47,9 +48,11 @@ Parameters:
 Resources:
   MongoDBAtlasFunction:
     Properties:
-      CodeUri: ./target/aws/build/
+      CodeUri: ./sumomongodbatlascollector
       Environment:
         Variables:
+          DBNAME:
+            Ref: MongoDBAtlasTableResource
           ENABLE_CONSOLE_LOG: 'false'
           ENVIRONMENT: aws
           HTTP_LOGS_ENDPOINT:
@@ -71,32 +74,34 @@ Resources:
           Type: Schedule
       Handler: main.main
       MemorySize: 256
-			Policies:
-			- Version: "2012-10-17"
-				Statement:
-				- Effect: Allow
-					Action:
-					- dynamodb:PutItem
+      Policies:
+      - Statement:
+        - Action:
+          - dynamodb:PutItem
           - dynamodb:UpdateItem
           - dynamodb:GetItem
           - dynamodb:Scan
           - dynamodb:Query
-          Resource: !GetAtt MongoDBAtlasTableResource.Arn
+          - dynamodb:DescribeTable
+          Effect: Allow
+          Resource:
+            Fn::GetAtt:
+            - MongoDBAtlasTableResource
+            - Arn
+        Version: '2012-10-17'
       Runtime: python3.11
       Timeout: 900
     Type: AWS::Serverless::Function
-
-	MongoDBAtlasTableResource:
-		Type: AWS::DynamoDB::Table
-		Properties:
-			TableName: !Sub ${AWS::StackName}-mongodbatlastable
-			AttributeDefinitions:
-			- AttributeName: id
-				AttributeType: S
-			KeySchema:
-			- AttributeName: id
-				KeyType: HASH
-			ProvisionedThroughput:
-				ReadCapacityUnits: 5
-				WriteCapacityUnits: 5
+  MongoDBAtlasTableResource:
+    Properties:
+      AttributeDefinitions:
+      - AttributeName: key_col
+        AttributeType: S
+      KeySchema:
+      - AttributeName: key_col
+        KeyType: HASH
+      ProvisionedThroughput:
+        ReadCapacityUnits: 30
+        WriteCapacityUnits: 20
+    Type: AWS::DynamoDB::Table
 Transform: AWS::Serverless-2016-10-31

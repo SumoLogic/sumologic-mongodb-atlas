@@ -21,7 +21,8 @@ CONSOLE_SCRIPTS = ["sumomongodbatlascollector=sumomongodbatlascollector.main:mai
 setup(
     name="sumologic-mongodb-atlas",
     version=__versionstr__,
-    packages=find_packages(),
+    packages=find_packages(exclude=["tests*"]),
+    package_data={"sumomongodbatlascollector": ["mongodbatlas.yaml"]},
     install_requires=INSTALL_REQUIRES,
     extras_require={
         "aws": ["boto3>=1.34.149", "botocore>=1.34.149"],
@@ -42,7 +43,6 @@ setup(
     keywords="sumologic python rest api log management analytics logreduce mongodb atlas agent security siem collector forwarder",
     url="https://github.com/SumoLogic/sumologic-mongodb-atlas",
     zip_safe=True,
-    include_package_data=True,
     classifiers=[
         "Development Status :: 4 - Beta",
         "Intended Audience :: Developers",
@@ -52,6 +52,7 @@ setup(
         "Programming Language :: Python :: 3.9",
         "Programming Language :: Python :: 3.10",
         "Programming Language :: Python :: 3.11",
+        "Programming Language :: Python :: 3.12",
         "Operating System :: OS Independent",
     ],
     entry_points={
