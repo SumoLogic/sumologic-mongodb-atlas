@@ -1,7 +1,5 @@
 import traceback
 import os
-from concurrent import futures
-from random import shuffle
 from requests.auth import HTTPDigestAuth
 from time_and_memory_tracker import TimeAndMemoryTracker
 
