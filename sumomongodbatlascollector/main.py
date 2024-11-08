@@ -42,6 +42,10 @@ class MongoDBAtlasCollector(BaseCollector):
             MAX_RETRY=self.collection_config["MAX_RETRY"],
             BACKOFF_FACTOR=self.collection_config["BACKOFF_FACTOR"],
         )
+        # removing redundant handlers since AWS Lambda also sets up a handler, on the root logger
+        if self.collection_config["ENVIRONMENT"] == "aws":
+            for hdlr in self.log.handlers:
+                self.log.removeHandler(hdlr)
 
     def get_current_dir(self):
         cur_dir = os.path.dirname(__file__)
