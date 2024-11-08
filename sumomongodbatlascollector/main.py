@@ -107,7 +107,7 @@ class MongoDBAtlasCollector(BaseCollector):
         all_cluster_aliases = list({self._get_cluster_name(obj["userAlias"]) for data in all_data for obj in data["results"]})
         user_provided_clusters = self._get_user_provided_cluster_name()
 
-        if len(user_provided_clusters) > 0:
+        if len(all_cluster_aliases) > 0 and len(user_provided_clusters) > 0:
             cluster_mapping = {}
             process_ids = set()
             hostnames = set()
