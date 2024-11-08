@@ -12,7 +12,7 @@ MongoDBAtlas:
   - EVENTS_PROJECT
   - EVENTS_ORG
  METRIC_TYPES:
-  PROCESS_METRICS:  # Query Parameter m in API: https://www.mongodb.com/docs/atlas/reference/api-resources-spec/v1/#tag/Monitoring-and-Logs/operation/getHostMeasurements. Commented ones are not used in the app.
+  PROCESS_METRICS:  # Query Parameter m in API: https://www.mongodb.com/docs/atlas/reference/api-resources-spec/v1/#tag/Monitoring-and-Logs/operation/getHostMeasurements. Commented ones are not used in the app. If you do not want to collect any of the metrics then comment all of them and provide empty list [] as value.
     - CACHE_DIRTY_BYTES
     - CACHE_USED_BYTES
     - CONNECTIONS
@@ -153,7 +153,7 @@ MongoDBAtlas:
     # - SYSTEM_NORMALIZED_CPU_SOFTIRQ
     # - TICKETS_AVAILABLE_READS
     # - TICKETS_AVAILABLE_WRITE
-  DISK_METRICS:  # Query Parameter m in API: https://www.mongodb.com/docs/atlas/reference/api-resources-spec/v1/#tag/Monitoring-and-Logs/operation/listDiskMeasurements. Commented ones are not used in the app.
+  DISK_METRICS:  # Query Parameter m in API: https://www.mongodb.com/docs/atlas/reference/api-resources-spec/v1/#tag/Monitoring-and-Logs/operation/listDiskMeasurements. Commented ones are not used in the app. If you do not want to collect any of the metrics then comment all of them and provide empty list [] as value.
     - DISK_PARTITION_IOPS_READ
     - DISK_PARTITION_IOPS_WRITE
     - DISK_PARTITION_LATENCY_READ
@@ -174,7 +174,7 @@ MongoDBAtlas:
     # - DISK_PARTITION_THROUGHPUT_READ
     # - DISK_PARTITION_THROUGHPUT_WRITE
     # - DISK_QUEUE_DEPTH
-  DATABASE_METRICS:  # Query Parameter m in API: https://www.mongodb.com/docs/atlas/reference/api-resources-spec/v1/#tag/Monitoring-and-Logs/operation/getDatabase. Commented ones are not used in the app.
+  DATABASE_METRICS:  # Query Parameter m in API: https://www.mongodb.com/docs/atlas/reference/api-resources-spec/v1/#tag/Monitoring-and-Logs/operation/getDatabase. Commented ones are not used in the app. If you do not want to collect any of the metrics then comment all of them and provide empty list [] as value.
     - DATABASE_AVERAGE_OBJECT_SIZE
     # - DATABASE_COLLECTION_COUNT
     # - DATABASE_DATA_SIZE
@@ -199,7 +199,7 @@ Collection:
  ENVIRONMENT: onprem
  NUM_WORKERS: 2  # Number of threads to spawn for API calls.
  OUTPUT_HANDLER: HTTP
- MAX_RETRY: 5  # Number of retries to attempt in case of request failure.
+ MAX_RETRY: 3  # Number of retries to attempt in case of request failure.
  BACKOFF_FACTOR: 1  # A backoff factor to apply between attempts after the second try. If the backoff_factor is 0.1, then sleep() will sleep for [0.0s, 0.2s, 0.4s, ...] between retries.
  TIMEOUT: 90 # Increase to 2 minutes if the sumo server response time is slow. This time out used by the requests library.
  COMPRESSED: true

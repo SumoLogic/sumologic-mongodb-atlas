@@ -24,6 +24,7 @@ class MongoDBAtlasCollector(BaseCollector):
     Design Doc: https://docs.google.com/document/d/15TgilyyuGTMjRIZUXVJa1UhpTu3wS-gMl-dDsXAV2gw/edit?usp=sharing
     """
 
+    COLLECTOR_PROCESS_NAME = "sumomongodbatlascollector"
     SINGLE_PROCESS_LOCK_KEY = "is_mongodbatlascollector_running"
     CONFIG_FILENAME = "mongodbatlas.yaml"
     DATA_REFRESH_TIME = 60 * 60 * 1000
@@ -230,15 +231,9 @@ class MongoDBAtlasCollector(BaseCollector):
         process_ids, hostnames = processes["process_ids"], processes["hostnames"]
         return process_ids, hostnames
 
-    def is_running(self):
-        self.log.debug("Acquiring single instance lock")
-        return self.kvstore.acquire_lock(self.SINGLE_PROCESS_LOCK_KEY)
-
-    def stop_running(self):
-        self.log.debug("Releasing single instance lock")
-        return self.kvstore.release_lock(self.SINGLE_PROCESS_LOCK_KEY)
-
     def build_task_params(self):
+        with TimeAndMemoryTracker(activate=self.collection_config.get("ACTIVATE_TIME_AND_MEMORY_TRACKING", False)) as tracker:
+            start_message = tracker.start("self.build_task_params")
         audit_files = ["mongodb-audit-log.gz", "mongos-audit-log.gz"]
         dblog_files = ["mongodb.gz", "mongos.gz"]
         filenames = []
@@ -309,52 +304,10 @@ class MongoDBAtlasCollector(BaseCollector):
                                 cluster_mapping,
                             )
                         )
-        self.log.info("%d Tasks Generated" % len(tasks))
+
+        end_message = tracker.end("self.build_task_params")
+        self.log.info(f'''{len(tasks)} Tasks Generated {start_message} {end_message}''')
         return tasks
-
-    def run(self):
-        if self.is_running():
-            try:
-                self.log.info("Starting MongoDB Atlas Forwarder...")
-                with TimeAndMemoryTracker(activate=self.collection_config.get("ACTIVATE_TIME_AND_MEMORY_TRACKING", False)) as tracker:
-                    start_message = tracker.start("self.build_task_params")
-                    task_params = self.build_task_params()
-                    end_message = tracker.end("self.build_task_params")
-                    self.log.info(f'''Building Task Params {start_message} {end_message}''')
-                    shuffle(task_params)
-                    all_futures = {}
-                    self.log.debug("spawning %d workers" % self.config["Collection"]["NUM_WORKERS"])
-                    with futures.ThreadPoolExecutor(
-                        max_workers=self.config["Collection"]["NUM_WORKERS"]
-                    ) as executor:
-                        results = {executor.submit(apiobj.fetch): apiobj for apiobj in task_params}
-                        all_futures.update(results)
-                    for future in futures.as_completed(all_futures):
-                        param = all_futures[future]
-                        api_type = str(param)
-                        try:
-                            future.result()
-                            obj = self.kvstore.get(api_type)
-                        except Exception as exc:
-                            self.log.error(f"API Type: {api_type} thread generated an exception: {exc}", exc_info=True,)
-                        else:
-                            self.log.info(f"API Type: {api_type} thread completed {obj}")
-            finally:
-                self.stop_running()
-                self.mongosess.close()
-        else:
-            if not self.is_process_running(["sumomongodbatlascollector"]):
-                self.kvstore.release_lock_on_expired_key(self.SINGLE_PROCESS_LOCK_KEY, expiry_min=10)
-
-    def test(self):
-        if self.is_running():
-            task_params = self.build_task_params()
-            shuffle(task_params)
-            try:
-                for apiobj in task_params:
-                    apiobj.fetch()
-            finally:
-                self.stop_running()
 
 
 def main(*args, **kwargs):
