@@ -69,6 +69,7 @@ class MongoDBAtlasCollector(BaseCollector):
                 all_data.append(data)
                 kwargs["params"]["pageNum"] = page_num + 1
             else:
+                self.log.error(f"Error in making GET request to url: {url} status: {status} message: {data}")
                 break
 
         return all_data
@@ -309,6 +310,8 @@ class MongoDBAtlasCollector(BaseCollector):
 
         end_message = tracker.end("self.build_task_params")
         self.log.info(f'''{len(tasks)} Tasks Generated {start_message} {end_message}''')
+        if len(tasks) == 0:
+            raise Exception("No tasks Generated")
         return tasks
 
 
